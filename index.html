@@ -341,12 +341,18 @@
             <div class="p-5 space-y-4">
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">登記的人</label>
-                    <select id="avMember" onchange="avDate=''; document.getElementById('avEditor').classList.add('hidden'); renderAvailGrid()" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"></select>
+                    <select id="avMember" onchange="avSel = []; document.getElementById('avEditor').classList.add('hidden'); renderAvailGrid()" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"></select>
                 </div>
                 <div class="flex items-center justify-between">
                     <button type="button" onclick="changeMonth(-1)" class="w-10 h-10 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center" aria-label="上個月"><i data-ic="chevL" data-cls="w-4 h-4"></i></button>
                     <span id="avMonthLabel" class="font-bold text-slate-800"></span>
                     <button type="button" onclick="changeMonth(1)" class="w-10 h-10 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center" aria-label="下個月"><i data-ic="chevR" data-cls="w-4 h-4"></i></button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <span class="text-slate-500">可以一次點很多天：</span>
+                    <button type="button" onclick="avQuick('weekend')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-medium text-slate-700">選週末</button>
+                    <button type="button" onclick="avQuick('all')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-medium text-slate-700">選整個月</button>
+                    <button type="button" onclick="avQuick('none')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-medium text-slate-700">取消選取</button>
                 </div>
                 <div id="avGrid" class="grid grid-cols-7 gap-1 text-center"></div>
                 <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
@@ -369,7 +375,7 @@
                             <input type="time" id="avTo" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"></div>
                     </div>
                     <div class="flex items-center justify-between gap-2 pt-1">
-                        <button type="button" id="avClearBtn" onclick="clearAvail()" class="px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-sm font-medium">清除這天</button>
+                        <button type="button" id="avClearBtn" onclick="clearAvail()" class="px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-sm font-medium">清除選取的天</button>
                         <button type="button" onclick="saveAvail()" class="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-sm font-semibold shadow">儲存</button>
                     </div>
                 </div>
@@ -496,7 +502,7 @@
         let searchTimer = null;
         let syncIdentityOnly = false;
         let avail = [];
-        let avDate = '';
+        let avSel = [];
         let avStatus = 'yes';
 
         /**************************************************************
@@ -887,7 +893,7 @@
             if (currentMonth > 11) { currentMonth = 0; currentYear++; }
             else if (currentMonth < 0) { currentMonth = 11; currentYear--; }
             renderAll();
-            if (isOpen('availModal')) { avDate = ''; document.getElementById('avEditor').classList.add('hidden'); renderAvailGrid(); }
+            if (isOpen('availModal')) { avSel = []; document.getElementById('avEditor').classList.add('hidden'); renderAvailGrid(); }
         }
         function goToToday() {
             const t = new Date();
@@ -1318,7 +1324,7 @@
             const sel = document.getElementById('avMember');
             const def = getMemberById(me) ? me : (selectedMemberId !== 'ALL' ? selectedMemberId : (members[0] ? members[0].id : ''));
             sel.innerHTML = members.map(m => `<option value="${escapeHtml(m.id)}" ${m.id === def ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
-            avDate = '';
+            avSel = [];
             document.getElementById('avEditor').classList.add('hidden');
             renderAvailGrid();
             openModal('availModal');
@@ -1335,23 +1341,49 @@
                 const date = `${monthPrefix()}-${pad(d)}`;
                 const a = getAvail(mid, date);
                 const hasEv = events.some(ev => ev.date === date && !isCancelled(ev) && ev.attendees.includes(mid));
-                html += `<button type="button" data-act="avPick" data-date="${date}" class="h-12 rounded-lg border text-sm font-bold flex flex-col items-center justify-center leading-tight ${AV_CLS[a ? a.status : 'none']} ${date === avDate ? 'ring-2 ring-indigo-600' : ''}">
+                html += `<button type="button" data-act="avPick" data-date="${date}" class="h-12 rounded-lg border text-sm font-bold flex flex-col items-center justify-center leading-tight ${AV_CLS[a ? a.status : 'none']} ${avSel.includes(date) ? 'ring-2 ring-indigo-600 ring-offset-1' : ''}">
                     <span>${d}</span><span class="text-[9px] font-semibold">${a ? escapeHtml(availShort(a)) : ''}</span>${hasEv ? '<span class="w-1.5 h-1.5 rounded-full bg-indigo-600 mt-0.5"></span>' : ''}</button>`;
             }
             document.getElementById('avGrid').innerHTML = html;
         }
 
         function pickAvailDay(date) {
+            const i = avSel.indexOf(date);
+            if (i >= 0) avSel.splice(i, 1); else avSel.push(date);
+            syncAvEditor();
+        }
+
+        function avQuick(kind) {
+            const days = new Date(currentYear, currentMonth + 1, 0).getDate();
+            avSel = [];
+            if (kind !== 'none') {
+                for (let d = 1; d <= days; d++) {
+                    const dow = new Date(currentYear, currentMonth, d).getDay();
+                    if (kind === 'all' || dow === 0 || dow === 6) avSel.push(`${monthPrefix()}-${pad(d)}`);
+                }
+            }
+            document.getElementById('avEditor').classList.add('hidden');
+            syncAvEditor();
+        }
+
+        function syncAvEditor() {
             const mid = document.getElementById('avMember').value;
-            const cur = getAvail(mid, date);
-            avDate = date;
-            avStatus = cur ? cur.status : 'yes';
-            document.getElementById('avFrom').value = cur ? cur.from : '';
-            document.getElementById('avTo').value = cur ? cur.to : '';
-            const d = new Date(date + 'T00:00:00');
-            document.getElementById('avEditorDate').textContent = `${d.getMonth() + 1}月${d.getDate()}日（週${['日', '一', '二', '三', '四', '五', '六'][d.getDay()]}）`;
-            document.getElementById('avClearBtn').classList.toggle('hidden', !cur);
-            document.getElementById('avEditor').classList.remove('hidden');
+            const editor = document.getElementById('avEditor');
+            if (!avSel.length) { editor.classList.add('hidden'); renderAvailGrid(); return; }
+            const sorted = [...avSel].sort();
+            if (editor.classList.contains('hidden')) {
+                const first = getAvail(mid, sorted[0]);
+                avStatus = first ? first.status : 'yes';
+                document.getElementById('avFrom').value = first ? first.from : '';
+                document.getElementById('avTo').value = first ? first.to : '';
+            }
+            const wd = ['日', '一', '二', '三', '四', '五', '六'];
+            const short = d => `${+d.slice(5, 7)}/${+d.slice(8)}`;
+            document.getElementById('avEditorDate').textContent = sorted.length === 1
+                ? `${short(sorted[0])}（週${wd[new Date(sorted[0] + 'T00:00:00').getDay()]}）`
+                : `已選 ${sorted.length} 天：${sorted.slice(0, 6).map(short).join('、')}${sorted.length > 6 ? '…' : ''}`;
+            document.getElementById('avClearBtn').classList.toggle('hidden', !sorted.some(d => getAvail(mid, d)));
+            editor.classList.remove('hidden');
             avSetStatus(avStatus);
             renderAvailGrid();
         }
@@ -1365,36 +1397,48 @@
             });
         }
 
+        // 一次送出多筆寫入（逐筆送，最後只重新整理一次）
+        async function commitMany(bodies) {
+            if (!REMOTE) { saveLocal(); return; }
+            pendingWrites++;
+            setSync('syncing');
+            try { for (const b of bodies) await api(b); }
+            catch (err) { handleApiError(err, false); }
+            finally { pendingWrites--; }
+            await refresh(true);
+        }
+
         function saveAvail() {
             const mid = document.getElementById('avMember').value;
-            if (!avDate || !mid) return;
-            const a = { id: `av_${avDate}_${mid}`, date: avDate, memberId: mid, status: avStatus, from: '', to: '' };
+            if (!avSel.length || !mid) return;
+            let from = '', to = '';
             if (avStatus === 'part') {
-                a.from = document.getElementById('avFrom').value;
-                a.to = document.getElementById('avTo').value;
-                if (!a.from && !a.to) { showToast('請至少填一個時間（幾點後才可，或幾點前要結束）', 'error'); return; }
-                if (a.from && a.to && a.to <= a.from) { showToast('「幾點前要結束」要晚於「幾點後才可」', 'error'); return; }
+                from = document.getElementById('avFrom').value;
+                to = document.getElementById('avTo').value;
+                if (!from && !to) { showToast('請至少填一個時間（幾點後才可，或幾點前要結束）', 'error'); return; }
+                if (from && to && to <= from) { showToast('「幾點前要結束」要晚於「幾點後才可」', 'error'); return; }
             }
-            avail = avail.filter(x => x.id !== a.id);
-            avail.push(a);
-            avDate = '';
+            const list = avSel.map(date => ({ id: `av_${date}_${mid}`, date, memberId: mid, status: avStatus, from, to }));
+            const ids = list.map(a => a.id);
+            avail = avail.filter(x => !ids.includes(x.id)).concat(list);
+            avSel = [];
             document.getElementById('avEditor').classList.add('hidden');
             renderAvailGrid();
             renderAll();
-            showToast('已登記');
-            commit({ action: 'upsertEvent', event: avToRow(a) });
+            showToast(list.length > 1 ? `已登記 ${list.length} 天` : '已登記');
+            commitMany(list.map(a => ({ action: 'upsertEvent', event: avToRow(a) })));
         }
 
         function clearAvail() {
             const mid = document.getElementById('avMember').value;
-            const id = `av_${avDate}_${mid}`;
-            avail = avail.filter(x => x.id !== id);
-            avDate = '';
+            const ids = avSel.map(d => `av_${d}_${mid}`).filter(id => avail.some(x => x.id === id));
+            avail = avail.filter(x => !ids.includes(x.id));
+            avSel = [];
             document.getElementById('avEditor').classList.add('hidden');
             renderAvailGrid();
             renderAll();
             showToast('已清除');
-            commit({ action: 'deleteEvent', id });
+            if (ids.length) commitMany(ids.map(id => ({ action: 'deleteEvent', id })));
         }
 
         function init() {
