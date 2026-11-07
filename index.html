@@ -69,6 +69,9 @@
                         </button>
                     </div>
                 </div>
+                <button onclick="openAvailModal()" class="bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-semibold px-3 py-2 rounded-lg transition shadow-md flex items-center gap-1.5">
+                    <i data-ic="check" data-cls="w-4 h-4"></i><span>可不可</span>
+                </button>
                 <button onclick="openEventModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-md flex items-center gap-1.5">
                     <i data-ic="plus" data-cls="w-4 h-4"></i><span>新增場次</span>
                 </button>
@@ -180,14 +183,14 @@
                 <input type="hidden" id="eventId">
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">場次標題 / 活動名稱 *</label>
-                    <input type="text" id="eventTitle" required maxlength="80" placeholder="例如：萬豪酒店婚禮演出、企業尾牙晚會、器材進場..."
+                    <input type="text" id="eventTitle" required maxlength="70" placeholder="例如：萬豪酒店婚禮演出、企業尾牙晚會、器材進場..."
                         class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">做場日期 *</label>
-                        <input type="date" id="eventDate" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <input type="date" id="eventDate" required onchange="updateAvailHint()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">開始時間 *</label>
@@ -213,6 +216,7 @@
                     </div>
                     <div id="modalMemberCheckboxes" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"></div>
                     <p id="memberErrorHint" class="text-xs text-rose-600 mt-2 hidden">請至少選擇一位出席人員！</p>
+                    <div id="availHint" class="text-xs space-y-1.5 mt-3"></div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -236,6 +240,11 @@
                     <textarea id="eventNotes" rows="3" maxlength="500" placeholder="例如：09:00 倉庫上車集合、穿著全黑西裝、自備耳返..."
                         class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
                 </div>
+
+                <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                    <input type="checkbox" id="eventCancelled" class="w-4 h-4 accent-rose-600">
+                    這場已取消（會留在日曆上並劃掉，不會算進場次數）
+                </label>
 
                 <div class="pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
                     <button type="button" id="deleteEventBtn" onclick="deleteCurrentEvent()" class="hidden px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-sm transition flex items-center gap-1.5">
@@ -322,6 +331,52 @@
         </div>
     </div>
 
+    <!-- 登記可不可 -->
+    <div id="availModal" data-backdrop class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-start justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden fade-in my-4 sm:my-8">
+            <div class="px-6 py-4 bg-teal-700 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2"><i data-ic="check" data-cls="w-5 h-5"></i><h3 class="font-bold text-lg">登記哪天可不可</h3></div>
+                <button onclick="closeModal('availModal')" class="text-teal-100 hover:text-white w-9 h-9 rounded-lg flex items-center justify-center" aria-label="關閉"><i data-ic="x" data-cls="w-5 h-5"></i></button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">登記的人</label>
+                    <select id="avMember" onchange="avDate=''; document.getElementById('avEditor').classList.add('hidden'); renderAvailGrid()" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"></select>
+                </div>
+                <div class="flex items-center justify-between">
+                    <button type="button" onclick="changeMonth(-1)" class="w-10 h-10 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center" aria-label="上個月"><i data-ic="chevL" data-cls="w-4 h-4"></i></button>
+                    <span id="avMonthLabel" class="font-bold text-slate-800"></span>
+                    <button type="button" onclick="changeMonth(1)" class="w-10 h-10 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center" aria-label="下個月"><i data-ic="chevR" data-cls="w-4 h-4"></i></button>
+                </div>
+                <div id="avGrid" class="grid grid-cols-7 gap-1 text-center"></div>
+                <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                    <span><span class="inline-block w-2.5 h-2.5 rounded bg-emerald-300 align-middle"></span> 可</span>
+                    <span><span class="inline-block w-2.5 h-2.5 rounded bg-rose-300 align-middle"></span> 不可</span>
+                    <span><span class="inline-block w-2.5 h-2.5 rounded bg-amber-300 align-middle"></span> 部分時段可</span>
+                    <span><span class="inline-block w-1.5 h-1.5 rounded-full bg-indigo-600 align-middle"></span> 已排場次</span>
+                </div>
+                <div id="avEditor" class="hidden border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50">
+                    <div id="avEditorDate" class="font-bold text-sm text-slate-800"></div>
+                    <div class="grid grid-cols-3 gap-2 text-sm font-semibold">
+                        <button type="button" id="avBtnYes" onclick="avSetStatus('yes')" class="py-2.5 rounded-xl border">全天可</button>
+                        <button type="button" id="avBtnNo" onclick="avSetStatus('no')" class="py-2.5 rounded-xl border">不可</button>
+                        <button type="button" id="avBtnPart" onclick="avSetStatus('part')" class="py-2.5 rounded-xl border">部分時段</button>
+                    </div>
+                    <div id="avTimes" class="hidden grid grid-cols-2 gap-2">
+                        <div><label class="block text-[11px] font-bold text-slate-600 mb-1">幾點後才可（選填）</label>
+                            <input type="time" id="avFrom" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-600 mb-1">幾點前要結束（選填）</label>
+                            <input type="time" id="avTo" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"></div>
+                    </div>
+                    <div class="flex items-center justify-between gap-2 pt-1">
+                        <button type="button" id="avClearBtn" onclick="clearAvail()" class="px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-sm font-medium">清除這天</button>
+                        <button type="button" onclick="saveAvail()" class="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-sm font-semibold shadow">儲存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 確認視窗 -->
     <div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] hidden items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 fade-in">
@@ -393,6 +448,10 @@
         const K_KEY = 'gig_key_v2';
         const K_ME = 'gig_me_v2';
         const K_ASKED = 'gig_me_asked_v2';
+        const K_AVAIL = 'gig_avail_v2';
+        // 「可不可」資料用特殊標題存進 Events 分頁，所以不需要改 Apps Script
+        const AV_TITLE = '__AV__';
+        const CANCEL_PREFIX = '【已取消】';
 
         const COLOR_THEMES = {
             blue:    { bg: 'bg-blue-100',    text: 'text-blue-800',    border: 'border-blue-300',    badgeBg: 'bg-blue-600',    lightCard: 'bg-blue-50/80 border-blue-200',       ring: 'ring-blue-500' },
@@ -436,6 +495,9 @@
         let confirmResolver = null;
         let searchTimer = null;
         let syncIdentityOnly = false;
+        let avail = [];
+        let avDate = '';
+        let avStatus = 'yes';
 
         /**************************************************************
          * 共用小工具
@@ -509,7 +571,8 @@
             if (REMOTE) return;
             const ok1 = store.set(K_MEMBERS, JSON.stringify(members));
             const ok2 = store.set(K_EVENTS, JSON.stringify(events));
-            if (!ok1 || !ok2) showToast('這個瀏覽器無法儲存資料，重新整理後會消失', 'error');
+            const ok3 = store.set(K_AVAIL, JSON.stringify(avail));
+            if (!ok1 || !ok2 || !ok3) showToast('這個瀏覽器無法儲存資料，重新整理後會消失', 'error');
         }
 
         async function api(body) {
@@ -551,10 +614,12 @@
 
         function applyServerData(r) {
             members = Array.isArray(r.members) ? r.members : [];
-            events = Array.isArray(r.events) ? r.events : [];
-            store.set(K_CACHE, JSON.stringify({ members, events }));
+            const sp = splitRows(Array.isArray(r.events) ? r.events : []);
+            events = sp.ev; avail = sp.av;
+            store.set(K_CACHE, JSON.stringify({ members, events, avail }));
             if (selectedMemberId !== 'ALL' && !getMemberById(selectedMemberId)) selectedMemberId = 'ALL';
             renderAll();
+            if (isOpen('availModal')) renderAvailGrid();
         }
 
         async function refresh(silent) {
@@ -644,7 +709,7 @@
 
         function renderMonthlyStatsBar() {
             const bar = document.getElementById('monthlyStatsBar');
-            const monthEvents = events.filter(ev => ev.date.startsWith(monthPrefix()));
+            const monthEvents = events.filter(ev => ev.date.startsWith(monthPrefix()) && !isCancelled(ev));
             const allSel = selectedMemberId === 'ALL';
             let html = `
                 <div data-act="filter" data-id="ALL" class="cursor-pointer p-2.5 rounded-xl border transition flex items-center justify-between ${
@@ -705,6 +770,7 @@
                                 isToday ? 'bg-indigo-600 text-white shadow-sm' : (dow === 0 || dow === 6) ? 'text-rose-500' : 'text-slate-700'}">${day}</span>
                             <span class="opacity-0 group-hover:opacity-100 text-slate-400 hidden sm:flex w-5 h-5 items-center justify-center">${ic('plus', 'w-3.5 h-3.5')}</span>
                         </div>
+                        ${renderAvailChips(dateStr)}
                         <div class="space-y-1 flex-1 min-w-0">${dayEvents.map(renderCalendarEventPill).join('')}</div>
                     </div>`;
             }
@@ -726,9 +792,10 @@
                 return `<span class="inline-block px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold rounded ${theme.badgeBg} text-white ${ring} leading-none">${escapeHtml(m.short || m.name)}</span>`;
             }).join('');
             return `
-                <div data-act="edit" data-id="${escapeHtml(ev.id)}" class="p-1 sm:p-1.5 rounded-lg border text-left transition ${cls}">
+                <div data-act="edit" data-id="${escapeHtml(ev.id)}" class="p-1 sm:p-1.5 rounded-lg border text-left transition ${cls} ${isCancelled(ev) ? 'grayscale' : ''}">
                     <div class="text-[10px] text-slate-500 font-semibold leading-tight">${escapeHtml(ev.startTime)}</div>
-                    <div class="hidden sm:block text-xs font-bold text-slate-800 truncate mt-0.5">${escapeHtml(ev.title)}</div>
+                    <div class="hidden sm:block text-xs font-bold text-slate-800 truncate mt-0.5 ${isCancelled(ev) ? 'line-through text-slate-400' : ''}">${escapeHtml(cleanTitle(ev))}</div>
+                    ${isCancelled(ev) ? '<div class="text-[9px] font-bold text-rose-600 leading-tight">已取消</div>' : ''}
                     <div class="flex flex-wrap gap-0.5 sm:gap-1 mt-0.5 sm:mt-1">${badges}</div>
                 </div>`;
         }
@@ -754,7 +821,7 @@
                     (ev.notes || '').toLowerCase().includes(searchVal));
             }
             filtered.sort(compareEvents);
-            document.getElementById('listCountBadge').textContent = `${filtered.length} 場`;
+            document.getElementById('listCountBadge').textContent = `${filtered.filter(ev => !isCancelled(ev)).length} 場`;
             const container = document.getElementById('eventListContainer');
 
             if (filtered.length === 0) {
@@ -779,7 +846,7 @@
                 }).join('') || `<span class="text-xs text-rose-600 font-medium">尚未指派出席人員</span>`;
                 const url = mapUrlFor(ev);
                 return `
-                    <div class="bg-white rounded-xl border border-slate-200/90 hover:border-indigo-300 hover:shadow-md transition p-4 space-y-3">
+                    <div class="bg-white rounded-xl border border-slate-200/90 hover:border-indigo-300 hover:shadow-md transition p-4 space-y-3 ${isCancelled(ev) ? 'grayscale opacity-80' : ''}">
                         <div class="flex items-start justify-between gap-2">
                             <div class="flex items-center gap-2.5 min-w-0">
                                 <div class="bg-indigo-600 text-white rounded-xl px-2.5 py-1.5 text-center min-w-[52px] shrink-0">
@@ -788,7 +855,7 @@
                                 </div>
                                 <div class="min-w-0">
                                     <div class="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">${ic('clock', 'w-3 h-3')}<span>${escapeHtml(fmtRange(ev))}</span></div>
-                                    <h4 class="font-bold text-slate-900 text-sm sm:text-base mt-1 break-words">${escapeHtml(ev.title)}</h4>
+                                    <h4 class="font-bold text-slate-900 text-sm sm:text-base mt-1 break-words ${isCancelled(ev) ? 'line-through text-slate-400' : ''}">${escapeHtml(cleanTitle(ev))}${isCancelled(ev) ? ' <span class="no-underline inline-block text-[11px] font-bold text-white bg-rose-600 rounded px-1.5 py-0.5 align-middle">已取消</span>' : ''}</h4>
                                 </div>
                             </div>
                             <button data-act="edit" data-id="${escapeHtml(ev.id)}" class="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 w-9 h-9 rounded-lg flex items-center justify-center transition shrink-0" title="編輯場次" aria-label="編輯場次">${ic('pencil', 'w-4 h-4')}</button>
@@ -820,6 +887,7 @@
             if (currentMonth > 11) { currentMonth = 0; currentYear++; }
             else if (currentMonth < 0) { currentMonth = 11; currentYear--; }
             renderAll();
+            if (isOpen('availModal')) { avDate = ''; document.getElementById('avEditor').classList.add('hidden'); renderAvailGrid(); }
         }
         function goToToday() {
             const t = new Date();
@@ -838,7 +906,8 @@
                 if (!ev) return;
                 document.getElementById('eventModalTitle').textContent = '編輯做場場次';
                 document.getElementById('eventId').value = ev.id;
-                document.getElementById('eventTitle').value = ev.title;
+                document.getElementById('eventTitle').value = cleanTitle(ev);
+                document.getElementById('eventCancelled').checked = isCancelled(ev);
                 document.getElementById('eventDate').value = ev.date;
                 document.getElementById('eventStartTime').value = ev.startTime || '10:00';
                 document.getElementById('eventEndTime').value = ev.endTime || '';
@@ -851,6 +920,7 @@
                 document.getElementById('eventModalTitle').textContent = '新增做場場次';
                 document.getElementById('eventId').value = '';
                 document.getElementById('eventTitle').value = '';
+                document.getElementById('eventCancelled').checked = false;
                 document.getElementById('eventDate').value = defaultDate || `${monthPrefix()}-${pad(Math.min(new Date().getDate(), new Date(currentYear, currentMonth + 1, 0).getDate()))}`;
                 document.getElementById('eventStartTime').value = '10:00';
                 document.getElementById('eventEndTime').value = '15:00';
@@ -869,9 +939,14 @@
             const s = document.getElementById('eventStartTime').value;
             const e = document.getElementById('eventEndTime').value;
             document.getElementById('timeHint').classList.toggle('hidden', !(s && e && e < s));
+            updateAvailHint();
         }
 
         function renderModalMemberCheckboxes(selectedIds = []) {
+            renderModalMemberCheckboxesInner(selectedIds);
+            updateAvailHint();
+        }
+        function renderModalMemberCheckboxesInner(selectedIds = []) {
             document.getElementById('modalMemberCheckboxes').innerHTML = members.map(m => {
                 const on = selectedIds.includes(m.id);
                 const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
@@ -913,7 +988,7 @@
             const editor = getMemberById(me);
             const data = {
                 id: id || uid('ev_'),
-                title: document.getElementById('eventTitle').value.trim(),
+                title: (document.getElementById('eventCancelled').checked ? CANCEL_PREFIX : '') + document.getElementById('eventTitle').value.trim(),
                 date,
                 startTime: document.getElementById('eventStartTime').value,
                 endTime: document.getElementById('eventEndTime').value,
@@ -1002,12 +1077,15 @@
             if (!ok) return;
             members = members.filter(x => x.id !== id);
             events.forEach(ev => { ev.attendees = ev.attendees.filter(a => a !== id); });
+            const goneAvail = avail.filter(a => a.memberId === id);
+            avail = avail.filter(a => a.memberId !== id);
             if (selectedMemberId === id) selectedMemberId = 'ALL';
             if (me === id) { me = ''; store.set(K_ME, ''); }
             renderMemberManageList();
             renderAll();
             showToast('成員已移除');
-            commit({ action: 'deleteMember', id });
+            await commit({ action: 'deleteMember', id });
+            for (const a of goneAvail) await commit({ action: 'deleteEvent', id: a.id });
         }
 
         /**************************************************************
@@ -1055,6 +1133,8 @@
             let head = `📢 【${currentYear}年${currentMonth + 1}月 做場出勤排班表】`;
             const sm = selectedMemberId === 'ALL' ? null : getMemberById(selectedMemberId);
             if (sm) { list = list.filter(ev => ev.attendees.includes(sm.id)); head = `📢 【${currentYear}年${currentMonth + 1}月 ${sm.name} 個人場次表】`; }
+            const cancelledList = list.filter(isCancelled);
+            list = list.filter(ev => !isCancelled(ev));
             const wd = ['日', '一', '二', '三', '四', '五', '六'];
             const lines = [head, '------------------------'];
             if (list.length === 0) lines.push('本月目前尚無安排場次。');
@@ -1062,12 +1142,17 @@
                 const d = new Date(ev.date + 'T00:00:00');
                 const names = ev.attendees.map(id => getMemberById(id)?.name).filter(Boolean).join('、') || '尚未指派';
                 lines.push(`${i + 1}. 📅 ${d.getMonth() + 1}/${d.getDate()}(${wd[d.getDay()]}) ${fmtRange(ev)}`);
-                lines.push(`   🎵 場次：${ev.title}`);
+                lines.push(`   🎵 場次：${cleanTitle(ev)}`);
                 lines.push(`   👥 出席：【${names}】`);
                 if (ev.location) lines.push(`   📍 地點：${ev.location}`);
                 if (ev.notes) lines.push(`   📝 備註：${ev.notes}`);
                 lines.push('');
             });
+            if (cancelledList.length) {
+                lines.push('❌ 已取消：');
+                cancelledList.forEach(ev => { const d = new Date(ev.date + 'T00:00:00'); lines.push(`   ${d.getMonth() + 1}/${d.getDate()} ${cleanTitle(ev)}`); });
+                lines.push('');
+            }
             lines.push(`共計 ${list.length} 場，請各位夥伴確認時間！`);
             document.getElementById('lineSummaryTextarea').value = lines.join('\n');
             openModal('lineSummaryModal');
@@ -1089,7 +1174,7 @@
         }
 
         function exportData() {
-            const payload = { version: 2, exportedAt: new Date().toISOString(), members, events };
+            const payload = { version: 2, exportedAt: new Date().toISOString(), members, events, avail };
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1113,6 +1198,7 @@
                         location: x.location || '', mapUrl: safeUrl(x.mapUrl || ''), attendees: Array.isArray(x.attendees) ? x.attendees.map(String) : [], notes: x.notes || ''
                     }));
                     members = okMembers; events = okEvents;
+                    avail = Array.isArray(p.avail) ? p.avail.filter(a => a && a.id && a.memberId && /^\d{4}-\d{2}-\d{2}$/.test(a.date || '')).map(a => ({ id: String(a.id), date: a.date, memberId: String(a.memberId), status: ['yes', 'no', 'part'].includes(a.status) ? a.status : 'yes', from: a.from || '', to: a.to || '' })) : [];
                     selectedMemberId = 'ALL';
                     saveLocal(); renderAll();
                     showToast(`匯入成功：${okMembers.length} 位成員、${okEvents.length} 個場次`);
@@ -1127,6 +1213,7 @@
             if (!ok) return;
             members = clone(DEFAULT_MEMBERS);
             events = buildDemoEvents();
+            avail = [];
             selectedMemberId = 'ALL';
             goToToday();
             saveLocal();
@@ -1136,6 +1223,180 @@
         /**************************************************************
          * 啟動
          **************************************************************/
+        /**************************************************************
+         * 取消場次 / 可不可（資料存進 Events 分頁，用特殊標題區分）
+         **************************************************************/
+        function isCancelled(ev) { return ev.title.startsWith(CANCEL_PREFIX); }
+        function cleanTitle(ev) { return isCancelled(ev) ? ev.title.slice(CANCEL_PREFIX.length) : ev.title; }
+
+        function splitRows(rows) {
+            const ev = [], av = [];
+            rows.forEach(r => {
+                if (r.title === AV_TITLE) {
+                    const mid = (r.attendees || [])[0];
+                    if (mid) av.push({ id: r.id, date: r.date, memberId: mid, status: r.notes === 'no' ? 'no' : (r.notes === 'part' ? 'part' : 'yes'), from: r.startTime || '', to: r.endTime || '' });
+                } else ev.push(r);
+            });
+            return { ev, av };
+        }
+        function avToRow(a) {
+            const editor = getMemberById(me);
+            return { id: a.id, title: AV_TITLE, date: a.date, startTime: a.from || '', endTime: a.to || '', location: '', mapUrl: '', attendees: [a.memberId], notes: a.status, updatedBy: editor ? editor.name : '', updatedAt: Date.now() };
+        }
+        function getAvail(memberId, date) { return avail.find(a => a.memberId === memberId && a.date === date); }
+        function availShort(a) {
+            if (a.status === 'yes') return '可';
+            if (a.status === 'no') return '不可';
+            return `${a.from ? a.from + '~' : '~'}${a.to || ''}`;
+        }
+        function availText(a) {
+            if (a.status === 'yes') return '當天可';
+            if (a.status === 'no') return '當天不可';
+            return `${a.from ? a.from + ' 後' : ''}${a.from && a.to ? '、' : ''}${a.to ? '需 ' + a.to + ' 前結束' : ''}才可`;
+        }
+        const AV_CLS = {
+            yes: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            no: 'bg-rose-100 text-rose-700 border-rose-300',
+            part: 'bg-amber-100 text-amber-800 border-amber-300',
+            none: 'bg-white text-slate-600 border-slate-200'
+        };
+
+        function checkAvail(memberId, date, start, end) {
+            const a = getAvail(memberId, date);
+            if (!a) return { level: 'none', text: '未登記' };
+            if (a.status === 'no') return { level: 'bad', text: '當天不可' };
+            if (a.status === 'yes') return { level: 'ok', text: '當天可' };
+            const issues = [];
+            if (a.from && start && start < a.from) issues.push(`${a.from} 後才可`);
+            if (a.to) {
+                if (!end) issues.push(`需 ${a.to} 前結束（這場沒填結束時間）`);
+                else if (end < start || end > a.to) issues.push(`需 ${a.to} 前結束`);
+            }
+            return issues.length ? { level: 'warn', text: issues.join('、') } : { level: 'ok', text: `${availText(a)}（符合）` };
+        }
+
+        // 月曆格內的「可不可」小標籤
+        function renderAvailChips(dateStr) {
+            let list = avail.filter(a => a.date === dateStr && getMemberById(a.memberId));
+            if (selectedMemberId !== 'ALL') list = list.filter(a => a.memberId === selectedMemberId);
+            if (!list.length) return '';
+            const sym = { yes: '✓', no: '✕', part: '◐' };
+            const chips = list.map(a => {
+                const m = getMemberById(a.memberId);
+                return `<span class="inline-block px-1 rounded border text-[9px] font-bold leading-4 ${AV_CLS[a.status]}">${escapeHtml(m.short || m.name)}${sym[a.status]}${a.status === 'part' ? escapeHtml(availShort(a)) : ''}</span>`;
+            }).join('');
+            if (selectedMemberId !== 'ALL') return `<div class="flex flex-wrap gap-0.5 mb-1">${chips}</div>`;
+            const n = s => list.filter(a => a.status === s).length;
+            const counts = ['yes', 'no', 'part'].filter(s => n(s)).map(s => `<span class="px-1 rounded border ${AV_CLS[s]}">${sym[s]}${n(s)}</span>`).join('');
+            return `<div class="hidden sm:flex flex-wrap gap-0.5 mb-1">${chips}</div><div class="sm:hidden flex gap-0.5 mb-0.5 text-[9px] font-bold">${counts}</div>`;
+        }
+
+        // 新增場次時：提醒被勾選的人當天可不可
+        function updateAvailHint() {
+            const box = document.getElementById('availHint');
+            if (!box) return;
+            const date = document.getElementById('eventDate').value;
+            if (!date) { box.innerHTML = ''; return; }
+            if (!avail.some(a => a.date === date)) { box.innerHTML = '<div class="text-slate-400 px-1">這天還沒有人登記可不可</div>'; return; }
+            const start = document.getElementById('eventStartTime').value;
+            const end = document.getElementById('eventEndTime').value;
+            const checked = checkedAttendees();
+            const style = { bad: ['text-rose-700 bg-rose-50 border-rose-200', '⚠ '], warn: ['text-amber-800 bg-amber-50 border-amber-200', '⚠ '], ok: ['text-emerald-800 bg-emerald-50 border-emerald-200', '✓ '], none: ['text-slate-500 bg-white border-slate-200', ''] };
+            let html = checked.map(id => {
+                const m = getMemberById(id);
+                if (!m) return '';
+                const r = checkAvail(id, date, start, end);
+                const [c, i] = style[r.level];
+                return `<div class="px-2.5 py-1.5 rounded-lg border ${c}">${i}<b>${escapeHtml(m.name)}</b>：${escapeHtml(r.text)}</div>`;
+            }).join('');
+            const free = members.filter(m => !checked.includes(m.id) && checkAvail(m.id, date, start, end).level === 'ok').map(m => m.name);
+            if (free.length) html += `<div class="text-slate-500 px-1">還有空可排：${escapeHtml(free.join('、'))}</div>`;
+            box.innerHTML = html;
+        }
+
+        function openAvailModal() {
+            const sel = document.getElementById('avMember');
+            const def = getMemberById(me) ? me : (selectedMemberId !== 'ALL' ? selectedMemberId : (members[0] ? members[0].id : ''));
+            sel.innerHTML = members.map(m => `<option value="${escapeHtml(m.id)}" ${m.id === def ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
+            avDate = '';
+            document.getElementById('avEditor').classList.add('hidden');
+            renderAvailGrid();
+            openModal('availModal');
+        }
+
+        function renderAvailGrid() {
+            const mid = document.getElementById('avMember').value;
+            document.getElementById('avMonthLabel').textContent = `${currentYear}年 ${currentMonth + 1}月`;
+            const first = new Date(currentYear, currentMonth, 1).getDay();
+            const days = new Date(currentYear, currentMonth + 1, 0).getDate();
+            let html = ['日', '一', '二', '三', '四', '五', '六'].map(w => `<div class="text-[11px] font-bold text-slate-400 py-1">${w}</div>`).join('');
+            for (let i = 0; i < first; i++) html += '<div></div>';
+            for (let d = 1; d <= days; d++) {
+                const date = `${monthPrefix()}-${pad(d)}`;
+                const a = getAvail(mid, date);
+                const hasEv = events.some(ev => ev.date === date && !isCancelled(ev) && ev.attendees.includes(mid));
+                html += `<button type="button" data-act="avPick" data-date="${date}" class="h-12 rounded-lg border text-sm font-bold flex flex-col items-center justify-center leading-tight ${AV_CLS[a ? a.status : 'none']} ${date === avDate ? 'ring-2 ring-indigo-600' : ''}">
+                    <span>${d}</span><span class="text-[9px] font-semibold">${a ? escapeHtml(availShort(a)) : ''}</span>${hasEv ? '<span class="w-1.5 h-1.5 rounded-full bg-indigo-600 mt-0.5"></span>' : ''}</button>`;
+            }
+            document.getElementById('avGrid').innerHTML = html;
+        }
+
+        function pickAvailDay(date) {
+            const mid = document.getElementById('avMember').value;
+            const cur = getAvail(mid, date);
+            avDate = date;
+            avStatus = cur ? cur.status : 'yes';
+            document.getElementById('avFrom').value = cur ? cur.from : '';
+            document.getElementById('avTo').value = cur ? cur.to : '';
+            const d = new Date(date + 'T00:00:00');
+            document.getElementById('avEditorDate').textContent = `${d.getMonth() + 1}月${d.getDate()}日（週${['日', '一', '二', '三', '四', '五', '六'][d.getDay()]}）`;
+            document.getElementById('avClearBtn').classList.toggle('hidden', !cur);
+            document.getElementById('avEditor').classList.remove('hidden');
+            avSetStatus(avStatus);
+            renderAvailGrid();
+        }
+
+        function avSetStatus(s) {
+            avStatus = s;
+            document.getElementById('avTimes').classList.toggle('hidden', s !== 'part');
+            const on = { yes: 'bg-emerald-600 text-white border-emerald-600', no: 'bg-rose-600 text-white border-rose-600', part: 'bg-amber-500 text-white border-amber-500' };
+            [['yes', 'avBtnYes'], ['no', 'avBtnNo'], ['part', 'avBtnPart']].forEach(([k, id]) => {
+                document.getElementById(id).className = `py-2.5 rounded-xl border ${s === k ? on[k] : 'bg-white text-slate-700 border-slate-300'}`;
+            });
+        }
+
+        function saveAvail() {
+            const mid = document.getElementById('avMember').value;
+            if (!avDate || !mid) return;
+            const a = { id: `av_${avDate}_${mid}`, date: avDate, memberId: mid, status: avStatus, from: '', to: '' };
+            if (avStatus === 'part') {
+                a.from = document.getElementById('avFrom').value;
+                a.to = document.getElementById('avTo').value;
+                if (!a.from && !a.to) { showToast('請至少填一個時間（幾點後才可，或幾點前要結束）', 'error'); return; }
+                if (a.from && a.to && a.to <= a.from) { showToast('「幾點前要結束」要晚於「幾點後才可」', 'error'); return; }
+            }
+            avail = avail.filter(x => x.id !== a.id);
+            avail.push(a);
+            avDate = '';
+            document.getElementById('avEditor').classList.add('hidden');
+            renderAvailGrid();
+            renderAll();
+            showToast('已登記');
+            commit({ action: 'upsertEvent', event: avToRow(a) });
+        }
+
+        function clearAvail() {
+            const mid = document.getElementById('avMember').value;
+            const id = `av_${avDate}_${mid}`;
+            avail = avail.filter(x => x.id !== id);
+            avDate = '';
+            document.getElementById('avEditor').classList.add('hidden');
+            renderAvailGrid();
+            renderAll();
+            showToast('已清除');
+            commit({ action: 'deleteEvent', id });
+        }
+
         function init() {
             hydrateIcons();
             const t = new Date();
@@ -1150,7 +1411,7 @@
                 document.getElementById('resetSep').classList.add('hidden');
                 try {
                     const c = JSON.parse(store.get(K_CACHE) || 'null');
-                    if (c && Array.isArray(c.members) && Array.isArray(c.events)) { members = c.members; events = c.events; }
+                    if (c && Array.isArray(c.members) && Array.isArray(c.events)) { members = c.members; events = c.events; avail = Array.isArray(c.avail) ? c.avail : []; }
                 } catch (e) { /* 沒有快取就等網路 */ }
                 renderSyncChip();
                 renderAll();
@@ -1163,6 +1424,7 @@
                     const sm = store.get(K_MEMBERS), se = store.get(K_EVENTS);
                     members = sm ? JSON.parse(sm) : clone(DEFAULT_MEMBERS);
                     events = se ? JSON.parse(se) : buildDemoEvents();
+                    avail = JSON.parse(store.get(K_AVAIL) || '[]');
                 } catch (e) { members = clone(DEFAULT_MEMBERS); events = buildDemoEvents(); }
                 renderSyncChip();
                 renderAll();
@@ -1178,6 +1440,7 @@
                 else if (act === 'edit') openEventModal(id);
                 else if (act === 'newOn') openEventModal(null, date);
                 else if (act === 'rmMember') removeMember(id);
+                else if (act === 'avPick') pickAvailDay(date);
             });
             document.addEventListener('change', e => {
                 if (e.target.dataset && e.target.dataset.rename) renameMember(e.target.dataset.rename, e.target.value);
@@ -1188,7 +1451,7 @@
             document.addEventListener('keydown', e => {
                 if (e.key !== 'Escape') return;
                 if (isOpen('confirmModal')) resolveConfirm(false);
-                else ['eventModal', 'memberModal', 'lineSummaryModal', 'syncModal'].some(id => { if (isOpen(id)) { closeModal(id); return true; } return false; });
+                else ['eventModal', 'memberModal', 'lineSummaryModal', 'syncModal', 'availModal'].some(id => { if (isOpen(id)) { closeModal(id); return true; } return false; });
             });
             document.getElementById('searchInput').addEventListener('input', () => {
                 clearTimeout(searchTimer);
