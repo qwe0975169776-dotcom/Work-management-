@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>做場出席整合系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'Noto Sans TC', 'sans-serif'] } } } }
+    </script>
+    <style>
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+        .fade-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
+                    <i data-ic="calendar" data-cls="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight">做場出席整合系統</h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">清楚掌握每一場演出時間、地點與出席夥伴</p>
+                </div>
+            </div>
+
+            <div class="flex items-center flex-wrap gap-2">
+                <button id="syncChip" onclick="onSyncChipClick()" class="text-xs font-medium px-2.5 py-2 rounded-lg border transition flex items-center gap-1.5"></button>
+                <button onclick="openLineSummaryModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5" title="產生適合貼到 LINE 的場次清單">
+                    <i data-ic="copy" data-cls="w-4 h-4"></i><span>複製公告</span>
+                </button>
+                <button onclick="openMemberModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg transition flex items-center gap-1.5">
+                    <i data-ic="users" data-cls="w-4 h-4"></i><span class="hidden md:inline">成員管理</span>
+                </button>
+                <div class="relative" id="moreMenuWrap">
+                    <button onclick="toggleMenu()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg transition flex items-center gap-1.5" aria-label="更多">
+                        <i data-ic="more" data-cls="w-4 h-4"></i><span class="hidden md:inline">更多</span>
+                    </button>
+                    <div id="moreMenu" class="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 hidden z-50 text-slate-700 text-sm">
+                        <button onclick="openSyncModal(); toggleMenu(false)" class="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2">
+                            <i data-ic="user" data-cls="w-4 h-4 text-indigo-600"></i> 同步設定 / 我是誰
+                        </button>
+                        <button onclick="exportData(); toggleMenu(false)" class="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2">
+                            <i data-ic="download" data-cls="w-4 h-4 text-indigo-600"></i> 匯出備份
+                        </button>
+                        <label id="importLabel" class="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
+                            <i data-ic="upload" data-cls="w-4 h-4 text-emerald-600"></i> 匯入備份檔
+                            <input type="file" id="importFileInput" accept=".json" class="hidden" onchange="importData(event)">
+                        </label>
+                        <hr id="resetSep" class="my-1 border-slate-100">
+                        <button id="resetBtn" onclick="resetDemoData(); toggleMenu(false)" class="w-full text-left px-4 py-2 hover:bg-rose-50 text-rose-600 flex items-center gap-2">
+                            <i data-ic="refresh" data-cls="w-4 h-4"></i> 重置示範資料
+                        </button>
+                    </div>
+                </div>
+                <button onclick="openEventModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-lg transition shadow-md flex items-center gap-1.5">
+                    <i data-ic="plus" data-cls="w-4 h-4"></i><span>新增場次</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 flex flex-col gap-5">
+
+        <!-- 示範模式提示 -->
+        <div id="demoBanner" class="hidden bg-amber-50 border border-amber-200 text-amber-900 text-xs sm:text-sm rounded-xl px-4 py-2.5 flex items-start gap-2">
+            <i data-ic="info" data-cls="w-4 h-4 mt-0.5 shrink-0 text-amber-600"></i>
+            <span><b>示範模式：</b>資料只存在這台裝置，其他人看不到。要讓大家同步，請依說明連接 Google 試算表（在檔案最上方填入 API_URL）。</span>
+        </div>
+
+        <!-- 控制面板 -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-5">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2.5">
+                        <span class="text-xs font-bold tracking-wider text-slate-400 flex items-center gap-1">
+                            <i data-ic="user" data-cls="w-3.5 h-3.5 text-indigo-500"></i>點選人物切換個人行程視角：
+                        </span>
+                        <span id="activeFilterHint" class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md hidden"></span>
+                    </div>
+                    <div id="memberFilterContainer" class="flex flex-wrap items-center gap-2"></div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between lg:justify-end gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                    <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        <button onclick="changeMonth(-1)" class="w-9 h-9 rounded-lg hover:bg-white hover:shadow-sm flex items-center justify-center text-slate-600 transition" title="上個月" aria-label="上個月">
+                            <i data-ic="chevL" data-cls="w-4 h-4"></i>
+                        </button>
+                        <div class="px-3 text-center min-w-[120px]">
+                            <span id="currentMonthLabel" class="font-bold text-slate-800 text-sm sm:text-base"></span>
+                        </div>
+                        <button onclick="changeMonth(1)" class="w-9 h-9 rounded-lg hover:bg-white hover:shadow-sm flex items-center justify-center text-slate-600 transition" title="下個月" aria-label="下個月">
+                            <i data-ic="chevR" data-cls="w-4 h-4"></i>
+                        </button>
+                        <button onclick="goToToday()" class="text-xs bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-medium px-2.5 py-2 rounded-lg ml-1 shadow-sm border border-slate-200/60 transition">本月</button>
+                    </div>
+                </div>
+            </div>
+            <div id="monthlyStatsBar" class="mt-4 pt-3.5 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5"></div>
+        </section>
+
+        <!-- 手機版：月曆 / 列表 切換 -->
+        <div class="sm:hidden grid grid-cols-2 bg-slate-200/70 rounded-xl p-1 text-sm font-semibold">
+            <button id="viewBtnList" onclick="setView('list')" class="py-2 rounded-lg flex items-center justify-center gap-1.5"><i data-ic="list" data-cls="w-4 h-4"></i>列表</button>
+            <button id="viewBtnCal" onclick="setView('cal')" class="py-2 rounded-lg flex items-center justify-center gap-1.5"><i data-ic="calendar" data-cls="w-4 h-4"></i>月曆</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <!-- 月曆 -->
+            <div id="calendarPanel" class="lg:col-span-7 xl:col-span-8 bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                <div class="px-4 sm:px-5 py-3.5 bg-slate-50/70 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <i data-ic="calendar" data-cls="w-4 h-4 text-indigo-600"></i>
+                        <h2 class="font-bold text-slate-800 text-sm sm:text-base">月曆排班總覽</h2>
+                        <span class="text-xs text-slate-400 hidden sm:inline">（點日期格可新增，點場次可編輯）</span>
+                    </div>
+                    <div id="calendarFilterBadge" class="text-xs font-medium"></div>
+                </div>
+                <div class="calendar-grid bg-slate-100/80 border-b border-slate-200 text-center text-xs font-bold text-slate-500 py-2.5">
+                    <div class="text-rose-500">日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div class="text-indigo-600">六</div>
+                </div>
+                <div id="calendarGrid" class="calendar-grid divide-x divide-y divide-slate-200/70 bg-slate-200/30"></div>
+            </div>
+
+            <!-- 清單 -->
+            <div id="listPanel" class="lg:col-span-5 xl:col-span-4 flex flex-col gap-4">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden flex flex-col max-h-[780px]">
+                    <div class="px-5 py-4 bg-gradient-to-r from-slate-800 to-slate-900 text-white flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center"><i data-ic="list" data-cls="w-4 h-4"></i></div>
+                            <div>
+                                <h3 id="listHeaderTitle" class="font-bold text-base leading-tight"></h3>
+                                <p id="listHeaderSubtitle" class="text-xs text-slate-300 mt-0.5"></p>
+                            </div>
+                        </div>
+                        <span id="listCountBadge" class="bg-white/15 text-white text-xs font-bold px-2.5 py-1 rounded-full">0 場</span>
+                    </div>
+                    <div class="p-3 bg-slate-50 border-b border-slate-200/70 flex items-center gap-2">
+                        <div class="relative flex-1">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><i data-ic="search" data-cls="w-3.5 h-3.5"></i></span>
+                            <input type="text" id="searchInput" placeholder="搜尋場次名稱、地點、備註..."
+                                class="w-full pl-8 pr-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <button onclick="clearSearch()" id="clearSearchBtn" class="hidden text-xs text-slate-500 hover:text-slate-700 px-2 py-1">清除</button>
+                    </div>
+                    <div id="eventListContainer" class="p-4 overflow-y-auto space-y-3.5 flex-1"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 新增/編輯場次 -->
+    <div id="eventModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-start justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-xl w-full overflow-hidden fade-in my-4 sm:my-8">
+            <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <i data-ic="calendar" data-cls="w-5 h-5 text-indigo-400"></i>
+                    <h3 id="eventModalTitle" class="font-bold text-lg">新增做場場次</h3>
+                </div>
+                <button onclick="closeModal('eventModal')" class="text-slate-400 hover:text-white w-9 h-9 rounded-lg flex items-center justify-center" aria-label="關閉"><i data-ic="x" data-cls="w-5 h-5"></i></button>
+            </div>
+
+            <form id="eventForm" onsubmit="saveEvent(event)" class="p-5 sm:p-6 space-y-4">
+                <input type="hidden" id="eventId">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">場次標題 / 活動名稱 *</label>
+                    <input type="text" id="eventTitle" required maxlength="80" placeholder="例如：萬豪酒店婚禮演出、企業尾牙晚會、器材進場..."
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">做場日期 *</label>
+                        <input type="date" id="eventDate" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">開始時間 *</label>
+                        <input type="time" id="eventStartTime" required oninput="updateTimeHint()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">結束時間</label>
+                        <input type="time" id="eventEndTime" oninput="updateTimeHint()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+                <p id="timeHint" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 hidden">結束時間早於開始時間，會當作「跨夜到隔天」。</p>
+
+                <div class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-2.5">
+                        <label class="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                            <i data-ic="users" data-cls="w-4 h-4 text-indigo-600"></i>這場有誰出席？（點擊指派）*
+                        </label>
+                        <div class="space-x-2 text-xs">
+                            <button type="button" onclick="toggleAllMembersInModal(true)" class="text-indigo-600 hover:underline font-medium">全選</button>
+                            <span class="text-slate-300">|</span>
+                            <button type="button" onclick="toggleAllMembersInModal(false)" class="text-slate-500 hover:underline">全不選</button>
+                        </div>
+                    </div>
+                    <div id="modalMemberCheckboxes" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"></div>
+                    <p id="memberErrorHint" class="text-xs text-rose-600 mt-2 hidden">請至少選擇一位出席人員！</p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">地點名稱 / 地址</label>
+                        <input type="text" id="eventLocation" maxlength="120" placeholder="例如：高雄漢來大飯店 9F 國際廳"
+                            class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-xs font-bold text-slate-700">Google Map 連結（選填）</label>
+                            <button type="button" onclick="autoFillGoogleMapUrl()" class="text-[11px] text-indigo-600 hover:underline font-medium">依地點自動產生</button>
+                        </div>
+                        <input type="url" id="eventMapUrl" placeholder="https://maps.google.com/..."
+                            class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">備註 / 集合時間 / 器材與服裝要求</label>
+                    <textarea id="eventNotes" rows="3" maxlength="500" placeholder="例如：09:00 倉庫上車集合、穿著全黑西裝、自備耳返..."
+                        class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
+                    <button type="button" id="deleteEventBtn" onclick="deleteCurrentEvent()" class="hidden px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-sm transition flex items-center gap-1.5">
+                        <i data-ic="trash" data-cls="w-4 h-4"></i> 刪除
+                    </button>
+                    <div class="flex items-center gap-2 ml-auto">
+                        <button type="button" onclick="closeModal('eventModal')" class="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-medium text-sm transition">取消</button>
+                        <button type="submit" class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-md transition flex items-center gap-1.5">
+                            <i data-ic="check" data-cls="w-4 h-4"></i> 儲存場次
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 成員管理 -->
+    <div id="memberModal" data-backdrop class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden fade-in">
+            <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2"><i data-ic="users" data-cls="w-5 h-5 text-indigo-400"></i><h3 class="font-bold text-lg">團隊成員管理</h3></div>
+                <button onclick="closeModal('memberModal')" class="text-slate-400 hover:text-white w-9 h-9 rounded-lg flex items-center justify-center" aria-label="關閉"><i data-ic="x" data-cls="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-xs text-slate-500">可直接修改名字（改完點一下空白處就會儲存）、新增或移除夥伴。移除成員時，他在各場次的出席標記會一併清掉。</p>
+                <div id="memberManageList" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
+                <form onsubmit="addNewMember(event)" class="pt-3 border-t border-slate-100 flex gap-2">
+                    <input type="text" id="newMemberName" required placeholder="新成員名稱 (例: 阿凱)" maxlength="8"
+                        class="flex-1 min-w-0 px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <select id="newMemberColor" class="px-2.5 py-2 rounded-xl border border-slate-300 text-sm bg-white">
+                        <option value="blue">藍色</option><option value="emerald">綠色</option><option value="amber">橘黃</option>
+                        <option value="purple">紫色</option><option value="rose">桃紅</option><option value="cyan">青色</option>
+                    </select>
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0">新增</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- LINE 公告 -->
+    <div id="lineSummaryModal" data-backdrop class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden fade-in">
+            <div class="px-6 py-4 bg-emerald-600 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2"><i data-ic="copy" data-cls="w-5 h-5"></i><h3 class="font-bold text-lg">產生群組場次公告</h3></div>
+                <button onclick="closeModal('lineSummaryModal')" class="text-emerald-100 hover:text-white w-9 h-9 rounded-lg flex items-center justify-center" aria-label="關閉"><i data-ic="x" data-cls="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-xs text-slate-500">依目前的月份與人物視角整理，可直接貼到 LINE 群組：</p>
+                <textarea id="lineSummaryTextarea" rows="11" readonly class="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-mono text-slate-700 focus:outline-none"></textarea>
+                <div class="flex justify-end gap-2">
+                    <button onclick="closeModal('lineSummaryModal')" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 text-sm font-medium hover:bg-slate-50">關閉</button>
+                    <button onclick="copyLineSummaryText()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow flex items-center gap-1.5">
+                        <i data-ic="copy" data-cls="w-4 h-4"></i> 一鍵複製
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 同步設定 -->
+    <div id="syncModal" data-backdrop class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden fade-in">
+            <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2"><i data-ic="user" data-cls="w-5 h-5 text-indigo-400"></i><h3 class="font-bold text-lg">同步設定</h3></div>
+                <button onclick="closeModal('syncModal')" class="text-slate-400 hover:text-white w-9 h-9 rounded-lg flex items-center justify-center" aria-label="關閉"><i data-ic="x" data-cls="w-5 h-5"></i></button>
+            </div>
+            <form onsubmit="saveSyncSettings(event)" class="p-6 space-y-4">
+                <p id="syncModalIntro" class="text-xs text-slate-500"></p>
+                <div id="keyField">
+                    <label class="block text-xs font-bold text-slate-700 mb-1">團隊通關密碼</label>
+                    <input type="password" id="keyInput" autocomplete="off" placeholder="向管理員詢問密碼"
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <p id="keyError" class="text-xs text-rose-600 mt-1 hidden">密碼不正確，請再試一次。</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">我是誰（選填，新增場次時會預設勾選自己）</label>
+                    <select id="meSelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"></select>
+                </div>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button type="button" onclick="closeModal('syncModal')" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 text-sm font-medium hover:bg-slate-50">取消</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow">儲存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 確認視窗 -->
+    <div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 fade-in">
+            <p id="confirmMsg" class="text-sm text-slate-700 leading-relaxed whitespace-pre-line"></p>
+            <div class="flex justify-end gap-2 mt-5">
+                <button onclick="resolveConfirm(false)" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 text-sm font-medium hover:bg-slate-50">取消</button>
+                <button id="confirmOk" onclick="resolveConfirm(true)" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="fixed bottom-5 right-5 left-5 sm:left-auto z-[70] flex flex-col gap-2 pointer-events-none items-end"></div>
+
+    <script>
+        /**************************************************************
+         * 設定區：要連接 Google 試算表時，把 Apps Script 部署後的網址貼在這裡
+         * 例如： API_URL: 'https://script.google.com/macros/s/xxxxxxxx/exec'
+         * 留空 = 示範模式（資料只存在這台裝置）
+         **************************************************************/
+        const CONFIG = {
+            API_URL: '',
+            POLL_MS: 30000
+        };
+        const REMOTE = !!CONFIG.API_URL;
+
+        /**************************************************************
+         * 小圖示（內建 SVG，不再依賴外部圖示庫）
+         **************************************************************/
+        const ICONS = {
+            calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+            plus: '<path d="M5 12h14M12 5v14"/>',
+            x: '<path d="M18 6 6 18M6 6l12 12"/>',
+            chevL: '<path d="m15 18-6-6 6-6"/>',
+            chevR: '<path d="m9 18 6-6-6-6"/>',
+            search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+            pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+            nav: '<path d="m3 11 19-9-9 19-2-8-8-2Z"/>',
+            clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+            pencil: '<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+            trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+            check: '<path d="M20 6 9 17l-5-5"/>',
+            copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+            download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+            upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+            users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+            user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+            info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+            alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+            refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5"/>',
+            list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+            more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+            cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>'
+        };
+        function ic(name, cls) {
+            return `<svg class="${cls || 'w-4 h-4'} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+        }
+        function hydrateIcons() {
+            document.querySelectorAll('i[data-ic]').forEach(el => {
+                el.outerHTML = ic(el.dataset.ic, el.dataset.cls);
+            });
+        }
+
+        /**************************************************************
+         * 狀態、顏色、預設資料
+         **************************************************************/
+        const K_MEMBERS = 'gig_schedule_members_v2';
+        const K_EVENTS = 'gig_schedule_events_v2';
+        const K_CACHE = 'gig_cache_v2';
+        const K_KEY = 'gig_key_v2';
+        const K_ME = 'gig_me_v2';
+        const K_ASKED = 'gig_me_asked_v2';
+
+        const COLOR_THEMES = {
+            blue:    { bg: 'bg-blue-100',    text: 'text-blue-800',    border: 'border-blue-300',    badgeBg: 'bg-blue-600',    lightCard: 'bg-blue-50/80 border-blue-200',       ring: 'ring-blue-500' },
+            emerald: { bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', badgeBg: 'bg-emerald-600', lightCard: 'bg-emerald-50/80 border-emerald-200', ring: 'ring-emerald-500' },
+            amber:   { bg: 'bg-amber-100',   text: 'text-amber-900',   border: 'border-amber-300',   badgeBg: 'bg-amber-500',   lightCard: 'bg-amber-50/80 border-amber-200',     ring: 'ring-amber-500' },
+            purple:  { bg: 'bg-purple-100',  text: 'text-purple-800',  border: 'border-purple-300',  badgeBg: 'bg-purple-600',  lightCard: 'bg-purple-50/80 border-purple-200',   ring: 'ring-purple-500' },
+            rose:    { bg: 'bg-rose-100',    text: 'text-rose-800',    border: 'border-rose-300',    badgeBg: 'bg-rose-600',    lightCard: 'bg-rose-50/80 border-rose-200',       ring: 'ring-rose-500' },
+            cyan:    { bg: 'bg-cyan-100',    text: 'text-cyan-800',    border: 'border-cyan-300',    badgeBg: 'bg-cyan-600',    lightCard: 'bg-cyan-50/80 border-cyan-200',       ring: 'ring-cyan-500' }
+        };
+
+        const DEFAULT_MEMBERS = [
+            { id: 'm1', name: '偉展', short: '展', color: 'blue' },
+            { id: 'm2', name: '東霖', short: '東霖', color: 'emerald' },
+            { id: 'm3', name: '段', short: '段', color: 'amber' },
+            { id: 'm4', name: '傑', short: '傑', color: 'purple' }
+        ];
+
+        // 示範場次：跟著「今天所在的月份」產生，不會過期
+        function buildDemoEvents() {
+            const t = new Date();
+            const p = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-`;
+            const mapQ = q => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
+            return [
+                { id: 'ev_101', title: '漢來大飯店 午宴婚禮場', date: p + '09', startTime: '10:30', endTime: '15:00', location: '高雄漢來大飯店 9F 金龍廳', mapUrl: mapQ('高雄漢來大飯店'), attendees: ['m1', 'm2'], notes: '09:30 地下室卸貨區集合，請著深色西裝，攜帶無線麥克風組。' },
+                { id: 'ev_102', title: '科技公司週年晚宴音響硬體場', date: p + '14', startTime: '16:00', endTime: '21:30', location: '高雄萬豪酒店 10F 皇喜宴會廳', mapUrl: mapQ('高雄萬豪酒店'), attendees: ['m1', 'm3', 'm4'], notes: '15:00 倉庫上器材，需提早進場架設舞台監聽與燈光控台。' },
+                { id: 'ev_103', title: '戶外草地證婚 & 晚宴做場', date: p + '16', startTime: '14:00', endTime: '20:30', location: '橋頭糖廠文化園區 展演區', mapUrl: mapQ('橋頭糖廠'), attendees: ['m2', 'm3'], notes: '戶外場注意防曬與延長線防水保護，備用發電機確認油量。' },
+                { id: 'ev_104', title: '全體大型商業發表會專場', date: p + '22', startTime: '09:00', endTime: '17:30', location: '高雄展覽館 南館大廳', mapUrl: mapQ('高雄展覽館'), attendees: ['m1', 'm2', 'm3', 'm4'], notes: '年度重點大場！全員出動，08:30 準時於南館卸貨口集合點名。' },
+                { id: 'ev_105', title: '品牌VIP感恩餐會演出', date: p + '28', startTime: '17:30', endTime: '21:00', location: '承億酒店 9F 宴會廳', mapUrl: mapQ('高雄承億酒店'), attendees: ['m1', 'm4'], notes: '自備平板與轉接頭，客戶有提供流程單與餐點。' }
+            ];
+        }
+
+        let members = [];
+        let events = [];
+        let currentYear, currentMonth;
+        let selectedMemberId = 'ALL';
+        let viewMode = 'list';
+        let key = '';
+        let me = '';
+        let pendingWrites = 0;
+        let syncState = { kind: 'demo', time: '' };
+        let confirmResolver = null;
+        let searchTimer = null;
+        let syncIdentityOnly = false;
+
+        /**************************************************************
+         * 共用小工具
+         **************************************************************/
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function todayStr() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+        function monthPrefix() { return `${currentYear}-${pad(currentMonth + 1)}`; }
+        function clone(o) { return JSON.parse(JSON.stringify(o)); }
+        function uid(prefix) {
+            const r = (window.crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10);
+            return prefix + r + Date.now().toString(36).slice(-3);
+        }
+        const memStore = {};
+        const store = {
+            get(k) { try { return localStorage.getItem(k); } catch (e) { return memStore[k] ?? null; } },
+            set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { memStore[k] = v; return false; } }
+        };
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+        // 多人共用時，網址只允許 http / https，避免有人塞入惡意連結
+        function safeUrl(u) {
+            try { const x = new URL(u); return (x.protocol === 'https:' || x.protocol === 'http:') ? x.href : ''; } catch (e) { return ''; }
+        }
+        function getMemberById(id) { return members.find(m => m.id === id); }
+        function mapUrlFor(ev) {
+            return safeUrl(ev.mapUrl) || (ev.location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location)}` : '');
+        }
+        function fmtRange(ev) {
+            if (!ev.endTime) return ev.startTime;
+            return `${ev.startTime} - ${ev.endTime < ev.startTime ? '隔天 ' : ''}${ev.endTime}`;
+        }
+        function compareEvents(a, b) {
+            return a.date !== b.date ? a.date.localeCompare(b.date) : (a.startTime || '').localeCompare(b.startTime || '');
+        }
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const bg = type === 'error' ? 'bg-rose-600' : 'bg-slate-900';
+            toast.className = `${bg} text-white px-4 py-2.5 rounded-xl shadow-xl border border-white/10 text-sm font-medium flex items-center gap-2 fade-in pointer-events-auto max-w-sm`;
+            toast.innerHTML = `${ic(type === 'error' ? 'alert' : 'check', 'w-4 h-4')}<span>${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s ease'; setTimeout(() => toast.remove(), 300); }, 2800);
+        }
+
+        /**************************************************************
+         * Modal 開關、確認視窗
+         **************************************************************/
+        function openModal(id) { const m = document.getElementById(id); m.classList.remove('hidden'); m.classList.add('flex'); }
+        function closeModal(id) { const m = document.getElementById(id); m.classList.add('hidden'); m.classList.remove('flex'); }
+        function isOpen(id) { return !document.getElementById(id).classList.contains('hidden'); }
+
+        function askConfirm(message, okText = '確定') {
+            return new Promise(resolve => {
+                confirmResolver = resolve;
+                document.getElementById('confirmMsg').textContent = message;
+                document.getElementById('confirmOk').textContent = okText;
+                openModal('confirmModal');
+            });
+        }
+        function resolveConfirm(result) {
+            closeModal('confirmModal');
+            if (confirmResolver) { const r = confirmResolver; confirmResolver = null; r(result); }
+        }
+
+        /**************************************************************
+         * 資料存取：示範模式存本機；同步模式存 Google 試算表
+         **************************************************************/
+        function saveLocal() {
+            if (REMOTE) return;
+            const ok1 = store.set(K_MEMBERS, JSON.stringify(members));
+            const ok2 = store.set(K_EVENTS, JSON.stringify(events));
+            if (!ok1 || !ok2) showToast('這個瀏覽器無法儲存資料，重新整理後會消失', 'error');
+        }
+
+        async function api(body) {
+            const res = await fetch(CONFIG.API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ ...body, key })
+            });
+            const data = await res.json();
+            if (!data.ok) { const e = new Error(data.error || 'ERROR'); e.code = data.error; throw e; }
+            return data;
+        }
+
+        function setSync(kind) {
+            const d = new Date();
+            syncState = { kind, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+            renderSyncChip();
+        }
+        function renderSyncChip() {
+            const chip = document.getElementById('syncChip');
+            const k = syncState.kind;
+            const base = 'text-xs font-medium px-2.5 py-2 rounded-lg border transition flex items-center gap-1.5 ';
+            const map = {
+                demo:    [base + 'bg-amber-500/15 text-amber-200 border-amber-400/30', 'cloud', '示範模式', false],
+                syncing: [base + 'bg-slate-800 text-slate-300 border-slate-700', 'refresh', '同步中…', true],
+                ok:      [base + 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30', 'check', `已同步 ${syncState.time}`, false],
+                error:   [base + 'bg-rose-500/20 text-rose-200 border-rose-400/40', 'alert', '同步失敗．點此重試', false],
+                needkey: [base + 'bg-rose-500/20 text-rose-200 border-rose-400/40', 'alert', '請輸入通關密碼', false]
+            };
+            const [cls, icon, text, spin] = map[k] || map.demo;
+            chip.className = cls;
+            chip.innerHTML = `<span class="${spin ? 'spin' : ''}">${ic(icon, 'w-3.5 h-3.5')}</span><span>${text}</span>`;
+        }
+        function onSyncChipClick() {
+            if (!REMOTE) { openSyncModal(); return; }
+            if (syncState.kind === 'needkey') openSyncModal();
+            else refresh(false);
+        }
+
+        function applyServerData(r) {
+            members = Array.isArray(r.members) ? r.members : [];
+            events = Array.isArray(r.events) ? r.events : [];
+            store.set(K_CACHE, JSON.stringify({ members, events }));
+            if (selectedMemberId !== 'ALL' && !getMemberById(selectedMemberId)) selectedMemberId = 'ALL';
+            renderAll();
+        }
+
+        async function refresh(silent) {
+            if (!REMOTE || !key || pendingWrites > 0) return;
+            setSync('syncing');
+            try {
+                const r = await api({ action: 'list' });
+                if (pendingWrites > 0) return;
+                applyServerData(r);
+                setSync('ok');
+                if (!me && !store.get(K_ASKED) && !isOpen('syncModal')) { store.set(K_ASKED, '1'); openSyncModal(true); }
+            } catch (err) { handleApiError(err, silent); }
+        }
+
+        function handleApiError(err, silent) {
+            if (err.code === 'BAD_KEY') {
+                setSync('needkey');
+                if (!isOpen('syncModal')) openSyncModal();
+                document.getElementById('keyError').classList.remove('hidden');
+            } else {
+                setSync('error');
+                if (!silent) showToast('連不上 Google 試算表，請檢查網路後再試', 'error');
+            }
+        }
+
+        // 所有「寫入」都走這裡：先改畫面(樂觀更新)，再送出，最後重新抓一次確保大家一致
+        async function commit(body) {
+            if (!REMOTE) { saveLocal(); return; }
+            pendingWrites++;
+            setSync('syncing');
+            try { await api(body); }
+            catch (err) { handleApiError(err, false); }
+            finally { pendingWrites--; }
+            await refresh(true);
+        }
+
+        /**************************************************************
+         * 渲染
+         **************************************************************/
+        function renderAll() {
+            renderMemberFilterBar();
+            renderMonthlyStatsBar();
+            renderCalendar();
+            renderScheduleList();
+            applyView();
+        }
+
+        function setView(mode) { viewMode = mode; applyView(); }
+        function applyView() {
+            document.getElementById('calendarPanel').classList.toggle('max-sm:hidden', viewMode === 'list');
+            document.getElementById('listPanel').classList.toggle('max-sm:hidden', viewMode === 'cal');
+            const on = 'bg-white shadow text-indigo-700', off = 'text-slate-600';
+            document.getElementById('viewBtnList').className = `py-2 rounded-lg flex items-center justify-center gap-1.5 ${viewMode === 'list' ? on : off}`;
+            document.getElementById('viewBtnCal').className = `py-2 rounded-lg flex items-center justify-center gap-1.5 ${viewMode === 'cal' ? on : off}`;
+        }
+
+        function renderMemberFilterBar() {
+            const container = document.getElementById('memberFilterContainer');
+            const hint = document.getElementById('activeFilterHint');
+            let html = `
+                <button data-act="filter" data-id="ALL" class="px-3.5 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 ${
+                    selectedMemberId === 'ALL' ? 'bg-slate-900 text-white shadow-md ring-2 ring-slate-900 ring-offset-1' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}">
+                    ${ic('users', 'w-4 h-4')}<span>全部人員</span>
+                </button>`;
+            members.forEach(m => {
+                const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
+                const sel = selectedMemberId === m.id;
+                html += `
+                    <button data-act="filter" data-id="${escapeHtml(m.id)}" class="px-3.5 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 border ${
+                        sel ? `${theme.badgeBg} text-white border-transparent shadow-md ring-2 ${theme.ring} ring-offset-1` : `bg-white ${theme.text} ${theme.border}`}">
+                        <span class="w-2.5 h-2.5 rounded-full ${sel ? 'bg-white' : theme.badgeBg}"></span>
+                        <span>${escapeHtml(m.name)}</span>
+                    </button>`;
+            });
+            container.innerHTML = html;
+            const m = selectedMemberId === 'ALL' ? null : getMemberById(selectedMemberId);
+            if (m) { hint.textContent = `目前檢視【${m.name}】的個人班表`; hint.classList.remove('hidden'); }
+            else hint.classList.add('hidden');
+        }
+
+        function setMemberFilter(memberId) {
+            selectedMemberId = memberId;
+            renderAll();
+            const m = getMemberById(memberId);
+            if (memberId !== 'ALL' && m) showToast(`已切換至「${m.name}」的個人行程`);
+        }
+
+        function renderMonthlyStatsBar() {
+            const bar = document.getElementById('monthlyStatsBar');
+            const monthEvents = events.filter(ev => ev.date.startsWith(monthPrefix()));
+            const allSel = selectedMemberId === 'ALL';
+            let html = `
+                <div data-act="filter" data-id="ALL" class="cursor-pointer p-2.5 rounded-xl border transition flex items-center justify-between ${
+                    allSel ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80 text-slate-700'}">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-lg ${allSel ? 'bg-white/15 text-white' : 'bg-slate-200 text-slate-700'} flex items-center justify-center text-xs font-bold">總</div>
+                        <span class="text-xs font-semibold">本月總場次</span>
+                    </div>
+                    <span class="text-sm font-extrabold">${monthEvents.length} <span class="text-[11px] font-normal opacity-75">場</span></span>
+                </div>`;
+            members.forEach(m => {
+                const count = monthEvents.filter(ev => ev.attendees.includes(m.id)).length;
+                const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
+                const sel = selectedMemberId === m.id;
+                html += `
+                    <div data-act="filter" data-id="${escapeHtml(m.id)}" class="cursor-pointer p-2.5 rounded-xl border transition flex items-center justify-between ${
+                        sel ? `${theme.lightCard} ring-2 ${theme.ring}` : 'bg-slate-50/70 hover:bg-slate-100 border-slate-200/70'}">
+                        <div class="flex items-center gap-2 truncate">
+                            <span class="min-w-6 h-6 px-1 rounded-md ${theme.badgeBg} text-white text-xs font-bold flex items-center justify-center shrink-0">${escapeHtml(m.short || m.name.charAt(0))}</span>
+                            <span class="text-xs font-bold text-slate-700 truncate">${escapeHtml(m.name)}</span>
+                        </div>
+                        <span class="text-sm font-extrabold ${theme.text} shrink-0">${count} <span class="text-[11px] font-normal text-slate-500">場</span></span>
+                    </div>`;
+            });
+            bar.innerHTML = html;
+        }
+
+        function renderCalendar() {
+            document.getElementById('currentMonthLabel').textContent = `${currentYear}年 ${currentMonth + 1}月`;
+            const badge = document.getElementById('calendarFilterBadge');
+            const sm = selectedMemberId === 'ALL' ? null : getMemberById(selectedMemberId);
+            if (!sm) badge.innerHTML = `<span class="text-slate-500">顯示全體人員場次</span>`;
+            else {
+                const theme = COLOR_THEMES[sm.color] || COLOR_THEMES.blue;
+                badge.innerHTML = `<span class="px-2.5 py-1 rounded-full ${theme.bg} ${theme.text} font-bold">高亮：${escapeHtml(sm.name)} 的場次</span>`;
+            }
+
+            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            const prevMonthDays = new Date(currentYear, currentMonth, 0).getDate();
+            const today = todayStr();
+            let html = '';
+
+            for (let i = firstDay - 1; i >= 0; i--) {
+                html += `<div class="min-h-[84px] sm:min-h-[125px] bg-slate-50/60 p-1.5 sm:p-2 text-slate-300 select-none"><div class="text-xs font-medium">${prevMonthDays - i}</div></div>`;
+            }
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${monthPrefix()}-${pad(day)}`;
+                const dayEvents = events.filter(ev => ev.date === dateStr).sort(compareEvents);
+                const isToday = dateStr === today;
+                const dow = new Date(currentYear, currentMonth, day).getDay();
+                const hasMine = sm && dayEvents.some(ev => ev.attendees.includes(sm.id));
+                const cellBg = hasMine ? 'bg-indigo-50/40 hover:bg-indigo-50/70' : 'bg-white hover:bg-slate-50/80';
+                html += `
+                    <div data-act="newOn" data-date="${dateStr}" class="min-h-[84px] sm:min-h-[128px] ${cellBg} p-1 sm:p-2 transition cursor-pointer flex flex-col group relative">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs sm:text-sm font-bold w-6 h-6 rounded-full flex items-center justify-center ${
+                                isToday ? 'bg-indigo-600 text-white shadow-sm' : (dow === 0 || dow === 6) ? 'text-rose-500' : 'text-slate-700'}">${day}</span>
+                            <span class="opacity-0 group-hover:opacity-100 text-slate-400 hidden sm:flex w-5 h-5 items-center justify-center">${ic('plus', 'w-3.5 h-3.5')}</span>
+                        </div>
+                        <div class="space-y-1 flex-1 min-w-0">${dayEvents.map(renderCalendarEventPill).join('')}</div>
+                    </div>`;
+            }
+            const remaining = (7 - ((firstDay + daysInMonth) % 7)) % 7;
+            for (let i = 1; i <= remaining; i++) {
+                html += `<div class="min-h-[84px] sm:min-h-[125px] bg-slate-50/60 p-1.5 sm:p-2 text-slate-300 select-none"><div class="text-xs font-medium">${i}</div></div>`;
+            }
+            document.getElementById('calendarGrid').innerHTML = html;
+        }
+
+        function renderCalendarEventPill(ev) {
+            const mine = selectedMemberId === 'ALL' || ev.attendees.includes(selectedMemberId);
+            const cls = mine ? 'opacity-100 border-slate-200 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/50' : 'opacity-30 bg-slate-50 border-slate-100 hover:opacity-75';
+            const badges = ev.attendees.map(id => {
+                const m = getMemberById(id);
+                if (!m) return '';
+                const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
+                const ring = selectedMemberId === id ? 'ring-2 ring-offset-1 ring-slate-900' : '';
+                return `<span class="inline-block px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold rounded ${theme.badgeBg} text-white ${ring} leading-none">${escapeHtml(m.short || m.name)}</span>`;
+            }).join('');
+            return `
+                <div data-act="edit" data-id="${escapeHtml(ev.id)}" class="p-1 sm:p-1.5 rounded-lg border text-left transition ${cls}">
+                    <div class="text-[10px] text-slate-500 font-semibold leading-tight">${escapeHtml(ev.startTime)}</div>
+                    <div class="hidden sm:block text-xs font-bold text-slate-800 truncate mt-0.5">${escapeHtml(ev.title)}</div>
+                    <div class="flex flex-wrap gap-0.5 sm:gap-1 mt-0.5 sm:mt-1">${badges}</div>
+                </div>`;
+        }
+
+        function renderScheduleList() {
+            const searchVal = document.getElementById('searchInput').value.trim().toLowerCase();
+            document.getElementById('clearSearchBtn').classList.toggle('hidden', !searchVal);
+
+            const sm = selectedMemberId === 'ALL' ? null : getMemberById(selectedMemberId);
+            let filtered = events.filter(ev => ev.date.startsWith(monthPrefix()));
+            if (sm) {
+                filtered = filtered.filter(ev => ev.attendees.includes(sm.id));
+                document.getElementById('listHeaderTitle').textContent = `${sm.name} 的個人場次`;
+                document.getElementById('listHeaderSubtitle').textContent = `${currentYear}年${currentMonth + 1}月 已安排的出勤行程`;
+            } else {
+                document.getElementById('listHeaderTitle').textContent = `${currentMonth + 1}月份 全體場次`;
+                document.getElementById('listHeaderSubtitle').textContent = '依日期與時間排序';
+            }
+            if (searchVal) {
+                filtered = filtered.filter(ev =>
+                    ev.title.toLowerCase().includes(searchVal) ||
+                    (ev.location || '').toLowerCase().includes(searchVal) ||
+                    (ev.notes || '').toLowerCase().includes(searchVal));
+            }
+            filtered.sort(compareEvents);
+            document.getElementById('listCountBadge').textContent = `${filtered.length} 場`;
+            const container = document.getElementById('eventListContainer');
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 px-4">
+                        <div class="w-14 h-14 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">${ic('calendar', 'w-6 h-6')}</div>
+                        <p class="text-sm font-bold text-slate-700">${sm ? `【${escapeHtml(sm.name)}】在本月尚無場次` : '本月尚無符合條件的場次'}</p>
+                        <p class="text-xs text-slate-400 mt-1">點日期格或上方「新增場次」即可開始排班</p>
+                    </div>`;
+                return;
+            }
+
+            const weekdays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+            container.innerHTML = filtered.map(ev => {
+                const d = new Date(ev.date + 'T00:00:00');
+                const pills = ev.attendees.map(id => {
+                    const m = getMemberById(id);
+                    if (!m) return '';
+                    const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
+                    return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${theme.bg} ${theme.text} border ${theme.border} ${selectedMemberId === id ? 'ring-2 ring-indigo-600' : ''}">
+                        <span class="w-2 h-2 rounded-full ${theme.badgeBg}"></span>${escapeHtml(m.name)}</span>`;
+                }).join('') || `<span class="text-xs text-rose-600 font-medium">尚未指派出席人員</span>`;
+                const url = mapUrlFor(ev);
+                return `
+                    <div class="bg-white rounded-xl border border-slate-200/90 hover:border-indigo-300 hover:shadow-md transition p-4 space-y-3">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <div class="bg-indigo-600 text-white rounded-xl px-2.5 py-1.5 text-center min-w-[52px] shrink-0">
+                                    <div class="text-[10px] font-medium leading-none opacity-85">${d.getMonth() + 1}月/${weekdays[d.getDay()]}</div>
+                                    <div class="text-lg font-extrabold leading-tight mt-0.5">${d.getDate()}</div>
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">${ic('clock', 'w-3 h-3')}<span>${escapeHtml(fmtRange(ev))}</span></div>
+                                    <h4 class="font-bold text-slate-900 text-sm sm:text-base mt-1 break-words">${escapeHtml(ev.title)}</h4>
+                                </div>
+                            </div>
+                            <button data-act="edit" data-id="${escapeHtml(ev.id)}" class="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 w-9 h-9 rounded-lg flex items-center justify-center transition shrink-0" title="編輯場次" aria-label="編輯場次">${ic('pencil', 'w-4 h-4')}</button>
+                        </div>
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-400 mb-1.5">當日出勤夥伴：</div>
+                            <div class="flex flex-wrap gap-1.5">${pills}</div>
+                        </div>
+                        ${ev.location || url ? `
+                        <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-100 flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2 text-xs text-slate-700 min-w-0">
+                                <span class="text-rose-500">${ic('pin', 'w-4 h-4')}</span>
+                                <span class="font-medium truncate">${escapeHtml(ev.location || '開啟地圖')}</span>
+                            </div>
+                            ${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition flex items-center gap-1">${ic('nav', 'w-3.5 h-3.5')}<span>導航</span></a>` : ''}
+                        </div>` : ''}
+                        ${ev.notes ? `<div class="text-xs text-slate-600 bg-amber-50/70 border border-amber-200/60 rounded-lg p-2.5 leading-relaxed whitespace-pre-line break-words">${escapeHtml(ev.notes)}</div>` : ''}
+                    </div>`;
+            }).join('');
+        }
+
+        function clearSearch() { document.getElementById('searchInput').value = ''; renderScheduleList(); }
+
+        /**************************************************************
+         * 月份切換
+         **************************************************************/
+        function changeMonth(delta) {
+            currentMonth += delta;
+            if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+            else if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+            renderAll();
+        }
+        function goToToday() {
+            const t = new Date();
+            currentYear = t.getFullYear(); currentMonth = t.getMonth();
+            renderAll();
+        }
+
+        /**************************************************************
+         * 新增 / 編輯場次
+         **************************************************************/
+        function openEventModal(eventId = null, defaultDate = null) {
+            document.getElementById('memberErrorHint').classList.add('hidden');
+            const deleteBtn = document.getElementById('deleteEventBtn');
+            if (eventId) {
+                const ev = events.find(x => x.id === eventId);
+                if (!ev) return;
+                document.getElementById('eventModalTitle').textContent = '編輯做場場次';
+                document.getElementById('eventId').value = ev.id;
+                document.getElementById('eventTitle').value = ev.title;
+                document.getElementById('eventDate').value = ev.date;
+                document.getElementById('eventStartTime').value = ev.startTime || '10:00';
+                document.getElementById('eventEndTime').value = ev.endTime || '';
+                document.getElementById('eventLocation').value = ev.location || '';
+                document.getElementById('eventMapUrl').value = ev.mapUrl || '';
+                document.getElementById('eventNotes').value = ev.notes || '';
+                renderModalMemberCheckboxes(ev.attendees);
+                deleteBtn.classList.remove('hidden');
+            } else {
+                document.getElementById('eventModalTitle').textContent = '新增做場場次';
+                document.getElementById('eventId').value = '';
+                document.getElementById('eventTitle').value = '';
+                document.getElementById('eventDate').value = defaultDate || `${monthPrefix()}-${pad(Math.min(new Date().getDate(), new Date(currentYear, currentMonth + 1, 0).getDate()))}`;
+                document.getElementById('eventStartTime').value = '10:00';
+                document.getElementById('eventEndTime').value = '15:00';
+                document.getElementById('eventLocation').value = '';
+                document.getElementById('eventMapUrl').value = '';
+                document.getElementById('eventNotes').value = '';
+                const pre = selectedMemberId !== 'ALL' ? [selectedMemberId] : (getMemberById(me) ? [me] : []);
+                renderModalMemberCheckboxes(pre);
+                deleteBtn.classList.add('hidden');
+            }
+            updateTimeHint();
+            openModal('eventModal');
+        }
+
+        function updateTimeHint() {
+            const s = document.getElementById('eventStartTime').value;
+            const e = document.getElementById('eventEndTime').value;
+            document.getElementById('timeHint').classList.toggle('hidden', !(s && e && e < s));
+        }
+
+        function renderModalMemberCheckboxes(selectedIds = []) {
+            document.getElementById('modalMemberCheckboxes').innerHTML = members.map(m => {
+                const on = selectedIds.includes(m.id);
+                const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
+                return `
+                    <label class="cursor-pointer select-none">
+                        <input type="checkbox" name="attendeeCheckbox" value="${escapeHtml(m.id)}" ${on ? 'checked' : ''} class="sr-only" onchange="updateMemberCheckboxStyles()">
+                        <div class="p-2.5 rounded-xl border-2 transition flex items-center gap-2 ${
+                            on ? `${theme.bg} ${theme.border} ${theme.text} font-bold ring-2 ${theme.ring} ring-offset-1` : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">
+                            <span class="min-w-6 h-6 px-1 rounded-lg ${theme.badgeBg} text-white text-xs font-bold flex items-center justify-center shrink-0">${escapeHtml(m.short || m.name.charAt(0))}</span>
+                            <span class="text-sm truncate">${escapeHtml(m.name)}</span>
+                            <span class="ml-auto ${on ? 'opacity-100' : 'opacity-0'}">${ic('check', 'w-4 h-4')}</span>
+                        </div>
+                    </label>`;
+            }).join('');
+        }
+        function checkedAttendees() {
+            return Array.from(document.querySelectorAll('input[name="attendeeCheckbox"]:checked')).map(cb => cb.value);
+        }
+        function updateMemberCheckboxStyles() {
+            const ids = checkedAttendees();
+            renderModalMemberCheckboxes(ids);
+            if (ids.length > 0) document.getElementById('memberErrorHint').classList.add('hidden');
+        }
+        function toggleAllMembersInModal(all) { renderModalMemberCheckboxes(all ? members.map(m => m.id) : []); }
+
+        function autoFillGoogleMapUrl() {
+            const loc = document.getElementById('eventLocation').value.trim();
+            if (!loc) { showToast('請先輸入「地點名稱或地址」', 'error'); document.getElementById('eventLocation').focus(); return; }
+            document.getElementById('eventMapUrl').value = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}`;
+            showToast('已自動產生 Google Map 導航連結');
+        }
+
+        function saveEvent(e) {
+            e.preventDefault();
+            const attendees = checkedAttendees();
+            if (attendees.length === 0) { document.getElementById('memberErrorHint').classList.remove('hidden'); return; }
+            const id = document.getElementById('eventId').value;
+            const date = document.getElementById('eventDate').value;
+            const editor = getMemberById(me);
+            const data = {
+                id: id || uid('ev_'),
+                title: document.getElementById('eventTitle').value.trim(),
+                date,
+                startTime: document.getElementById('eventStartTime').value,
+                endTime: document.getElementById('eventEndTime').value,
+                location: document.getElementById('eventLocation').value.trim(),
+                mapUrl: safeUrl(document.getElementById('eventMapUrl').value.trim()),
+                attendees,
+                notes: document.getElementById('eventNotes').value.trim(),
+                updatedBy: editor ? editor.name : '',
+                updatedAt: Date.now()
+            };
+            const idx = events.findIndex(x => x.id === id);
+            if (id && idx !== -1) events[idx] = data; else events.push(data);
+
+            const [y, m] = date.split('-').map(Number);
+            currentYear = y; currentMonth = m - 1;
+            closeModal('eventModal');
+            renderAll();
+            showToast(id ? '場次資訊已更新' : '已新增場次');
+            commit({ action: 'upsertEvent', event: data });
+        }
+
+        async function deleteCurrentEvent() {
+            const id = document.getElementById('eventId').value;
+            const ev = events.find(x => x.id === id);
+            if (!ev) return;
+            const ok = await askConfirm(`確定要刪除這場嗎？\n\n${ev.date}　${ev.title}\n\n刪除後所有人都會看不到。`, '刪除');
+            if (!ok) return;
+            events = events.filter(x => x.id !== id);
+            closeModal('eventModal');
+            renderAll();
+            showToast('場次已刪除');
+            commit({ action: 'deleteEvent', id });
+        }
+
+        /**************************************************************
+         * 成員管理
+         **************************************************************/
+        function openMemberModal() { renderMemberManageList(); openModal('memberModal'); }
+
+        function renderMemberManageList() {
+            document.getElementById('memberManageList').innerHTML = members.map(m => {
+                const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
+                return `
+                    <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                            <span class="min-w-7 h-7 px-1 rounded-lg ${theme.badgeBg} text-white text-xs font-bold flex items-center justify-center shrink-0">${escapeHtml(m.short || m.name.charAt(0))}</span>
+                            <input type="text" value="${escapeHtml(m.name)}" maxlength="8" data-rename="${escapeHtml(m.id)}"
+                                class="min-w-0 flex-1 text-sm font-bold text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-none py-1">
+                        </div>
+                        ${members.length > 1 ? `<button data-act="rmMember" data-id="${escapeHtml(m.id)}" class="text-slate-400 hover:text-rose-600 w-9 h-9 flex items-center justify-center transition shrink-0" title="移除成員" aria-label="移除成員">${ic('trash', 'w-4 h-4')}</button>` : ''}
+                    </div>`;
+            }).join('');
+        }
+
+        function shortOf(name) { return name.length > 2 ? name.slice(-2) : name; }
+
+        function addNewMember(e) {
+            e.preventDefault();
+            const input = document.getElementById('newMemberName');
+            const name = input.value.trim();
+            if (!name) return;
+            const member = { id: uid('m_'), name, short: shortOf(name), color: document.getElementById('newMemberColor').value };
+            members.push(member);
+            input.value = '';
+            renderMemberManageList();
+            renderAll();
+            showToast(`已新增成員：${name}`);
+            commit({ action: 'upsertMember', member });
+        }
+
+        function renameMember(id, value) {
+            const m = getMemberById(id);
+            const name = value.trim();
+            if (!m || !name || name === m.name) { renderMemberManageList(); return; }
+            m.name = name; m.short = shortOf(name);
+            renderMemberManageList();
+            renderAll();
+            commit({ action: 'upsertMember', member: m });
+        }
+
+        async function removeMember(id) {
+            const m = getMemberById(id);
+            if (!m) return;
+            const n = events.filter(ev => ev.attendees.includes(id)).length;
+            const ok = await askConfirm(`確定要移除「${m.name}」嗎？\n${n > 0 ? `他在 ${n} 個場次的出席標記也會一併清掉。` : '他目前沒有被排在任何場次。'}`, '移除');
+            if (!ok) return;
+            members = members.filter(x => x.id !== id);
+            events.forEach(ev => { ev.attendees = ev.attendees.filter(a => a !== id); });
+            if (selectedMemberId === id) selectedMemberId = 'ALL';
+            if (me === id) { me = ''; store.set(K_ME, ''); }
+            renderMemberManageList();
+            renderAll();
+            showToast('成員已移除');
+            commit({ action: 'deleteMember', id });
+        }
+
+        /**************************************************************
+         * 同步設定（通關密碼 / 我是誰）
+         **************************************************************/
+        function openSyncModal(identityOnly) {
+            syncIdentityOnly = identityOnly === true;
+            const sel = document.getElementById('meSelect');
+            sel.innerHTML = `<option value="">（不指定）</option>` + members.map(m => `<option value="${escapeHtml(m.id)}" ${m.id === me ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
+            document.getElementById('keyField').classList.toggle('hidden', !REMOTE || syncIdentityOnly);
+            document.getElementById('keyInput').value = '';
+            document.getElementById('keyError').classList.add('hidden');
+            document.getElementById('syncModalIntro').textContent = syncIdentityOnly
+                ? '連線成功！請選一下你是誰（選填），之後新增場次時會預設勾選自己，也會記錄是誰改的。'
+                : REMOTE
+                ? '輸入團隊通關密碼後，就能看到並編輯大家共用的日曆。密碼只會記在這支手機/電腦的瀏覽器裡。'
+                : '目前是示範模式，不需要密碼。你可以先選「我是誰」，新增場次時會預設勾選自己。';
+            openModal('syncModal');
+        }
+        function saveSyncSettings(e) {
+            e.preventDefault();
+            me = document.getElementById('meSelect').value;
+            store.set(K_ME, me);
+            if (REMOTE && !syncIdentityOnly) {
+                const k = document.getElementById('keyInput').value.trim();
+                if (k) key = k;
+                if (!key) { document.getElementById('keyError').textContent = '請輸入通關密碼'; document.getElementById('keyError').classList.remove('hidden'); return; }
+                store.set(K_KEY, key);
+                document.getElementById('keyError').textContent = '密碼不正確，請再試一次。';
+                document.getElementById('keyError').classList.add('hidden');
+                closeModal('syncModal');
+                refresh(false);
+            } else {
+                closeModal('syncModal');
+                renderAll();
+                showToast('已儲存');
+            }
+        }
+
+        /**************************************************************
+         * LINE 公告 / 備份
+         **************************************************************/
+        function openLineSummaryModal() {
+            let list = events.filter(ev => ev.date.startsWith(monthPrefix())).sort(compareEvents);
+            let head = `📢 【${currentYear}年${currentMonth + 1}月 做場出勤排班表】`;
+            const sm = selectedMemberId === 'ALL' ? null : getMemberById(selectedMemberId);
+            if (sm) { list = list.filter(ev => ev.attendees.includes(sm.id)); head = `📢 【${currentYear}年${currentMonth + 1}月 ${sm.name} 個人場次表】`; }
+            const wd = ['日', '一', '二', '三', '四', '五', '六'];
+            const lines = [head, '------------------------'];
+            if (list.length === 0) lines.push('本月目前尚無安排場次。');
+            list.forEach((ev, i) => {
+                const d = new Date(ev.date + 'T00:00:00');
+                const names = ev.attendees.map(id => getMemberById(id)?.name).filter(Boolean).join('、') || '尚未指派';
+                lines.push(`${i + 1}. 📅 ${d.getMonth() + 1}/${d.getDate()}(${wd[d.getDay()]}) ${fmtRange(ev)}`);
+                lines.push(`   🎵 場次：${ev.title}`);
+                lines.push(`   👥 出席：【${names}】`);
+                if (ev.location) lines.push(`   📍 地點：${ev.location}`);
+                if (ev.notes) lines.push(`   📝 備註：${ev.notes}`);
+                lines.push('');
+            });
+            lines.push(`共計 ${list.length} 場，請各位夥伴確認時間！`);
+            document.getElementById('lineSummaryTextarea').value = lines.join('\n');
+            openModal('lineSummaryModal');
+        }
+
+        async function copyLineSummaryText() {
+            const ta = document.getElementById('lineSummaryTextarea');
+            let ok = false;
+            try { await navigator.clipboard.writeText(ta.value); ok = true; }
+            catch (e) { try { ta.select(); ok = document.execCommand('copy'); } catch (e2) { ok = false; } }
+            if (ok) { showToast('已複製！可直接貼到 LINE 群組'); closeModal('lineSummaryModal'); }
+            else { ta.select(); showToast('這裡無法自動複製，請長按文字手動複製', 'error'); }
+        }
+
+        function toggleMenu(force) {
+            const menu = document.getElementById('moreMenu');
+            const show = typeof force === 'boolean' ? force : menu.classList.contains('hidden');
+            menu.classList.toggle('hidden', !show);
+        }
+
+        function exportData() {
+            const payload = { version: 2, exportedAt: new Date().toISOString(), members, events };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `做場出席備份_${todayStr()}.json`;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            showToast('已匯出備份檔');
+        }
+
+        function importData(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = ev => {
+                try {
+                    const p = JSON.parse(ev.target.result);
+                    if (!Array.isArray(p.members) || !Array.isArray(p.events)) throw new Error('format');
+                    const okMembers = p.members.filter(m => m && m.id && m.name).map(m => ({ id: String(m.id), name: String(m.name), short: m.short || shortOf(String(m.name)), color: COLOR_THEMES[m.color] ? m.color : 'blue' }));
+                    const okEvents = p.events.filter(x => x && x.id && x.title && /^\d{4}-\d{2}-\d{2}$/.test(x.date || '')).map(x => ({
+                        id: String(x.id), title: String(x.title), date: x.date, startTime: x.startTime || '10:00', endTime: x.endTime || '',
+                        location: x.location || '', mapUrl: safeUrl(x.mapUrl || ''), attendees: Array.isArray(x.attendees) ? x.attendees.map(String) : [], notes: x.notes || ''
+                    }));
+                    members = okMembers; events = okEvents;
+                    selectedMemberId = 'ALL';
+                    saveLocal(); renderAll();
+                    showToast(`匯入成功：${okMembers.length} 位成員、${okEvents.length} 個場次`);
+                } catch (err) { showToast('檔案格式不正確，無法匯入', 'error'); }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        }
+
+        async function resetDemoData() {
+            const ok = await askConfirm('確定要重置嗎？\n目前這台裝置上的所有場次與成員都會被示範資料取代。', '重置');
+            if (!ok) return;
+            members = clone(DEFAULT_MEMBERS);
+            events = buildDemoEvents();
+            selectedMemberId = 'ALL';
+            goToToday();
+            saveLocal();
+            showToast('已重置為示範資料');
+        }
+
+        /**************************************************************
+         * 啟動
+         **************************************************************/
+        function init() {
+            hydrateIcons();
+            const t = new Date();
+            currentYear = t.getFullYear(); currentMonth = t.getMonth();
+            viewMode = window.innerWidth < 640 ? 'list' : 'cal';
+            me = store.get(K_ME) || '';
+
+            if (REMOTE) {
+                key = store.get(K_KEY) || '';
+                document.getElementById('importLabel').classList.add('hidden');
+                document.getElementById('resetBtn').classList.add('hidden');
+                document.getElementById('resetSep').classList.add('hidden');
+                try {
+                    const c = JSON.parse(store.get(K_CACHE) || 'null');
+                    if (c && Array.isArray(c.members) && Array.isArray(c.events)) { members = c.members; events = c.events; }
+                } catch (e) { /* 沒有快取就等網路 */ }
+                renderSyncChip();
+                renderAll();
+                if (!key) { setSync('needkey'); openSyncModal(); } else refresh(false);
+                setInterval(() => { if (!document.hidden) refresh(true); }, CONFIG.POLL_MS);
+                document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
+            } else {
+                document.getElementById('demoBanner').classList.remove('hidden');
+                try {
+                    const sm = store.get(K_MEMBERS), se = store.get(K_EVENTS);
+                    members = sm ? JSON.parse(sm) : clone(DEFAULT_MEMBERS);
+                    events = se ? JSON.parse(se) : buildDemoEvents();
+                } catch (e) { members = clone(DEFAULT_MEMBERS); events = buildDemoEvents(); }
+                renderSyncChip();
+                renderAll();
+            }
+
+            // 事件委派：所有動態產生的按鈕都用 data-act，不再把 ID 寫進 onclick
+            document.addEventListener('click', e => {
+                if (!e.target.closest('#moreMenuWrap')) toggleMenu(false);
+                const t = e.target.closest('[data-act]');
+                if (!t) return;
+                const { act, id, date } = t.dataset;
+                if (act === 'filter') setMemberFilter(id);
+                else if (act === 'edit') openEventModal(id);
+                else if (act === 'newOn') openEventModal(null, date);
+                else if (act === 'rmMember') removeMember(id);
+            });
+            document.addEventListener('change', e => {
+                if (e.target.dataset && e.target.dataset.rename) renameMember(e.target.dataset.rename, e.target.value);
+            });
+            document.querySelectorAll('[data-backdrop]').forEach(el => {
+                el.addEventListener('mousedown', e => { if (e.target === el) closeModal(el.id); });
+            });
+            document.addEventListener('keydown', e => {
+                if (e.key !== 'Escape') return;
+                if (isOpen('confirmModal')) resolveConfirm(false);
+                else ['eventModal', 'memberModal', 'lineSummaryModal', 'syncModal'].some(id => { if (isOpen(id)) { closeModal(id); return true; } return false; });
+            });
+            document.getElementById('searchInput').addEventListener('input', () => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(renderScheduleList, 150);
+            });
+        }
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
