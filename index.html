@@ -57,7 +57,10 @@
                             <i data-ic="user" data-cls="w-4 h-4 text-indigo-600"></i> 設定 / 更新日記
                         </button>
                         <button onclick="exportData(); toggleMenu(false)" class="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2">
-                            <i data-ic="download" data-cls="w-4 h-4 text-indigo-600"></i> 匯出備份
+                            <i data-ic="download" data-cls="w-4 h-4 text-indigo-600"></i> 匯出備份 (JSON)
+                        </button>
+                        <button onclick="openModal('csvModal'); toggleMenu(false)" class="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2">
+                            <i data-ic="list" data-cls="w-4 h-4 text-emerald-600"></i> 匯出 CSV（給老闆）
                         </button>
                         <label id="importLabel" class="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
                             <i data-ic="upload" data-cls="w-4 h-4 text-emerald-600"></i> 匯入備份檔
@@ -213,8 +216,26 @@
                         </div>
                     </div>
                     <div id="modalMemberCheckboxes" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"></div>
-                    <p id="memberErrorHint" class="text-xs text-rose-600 mt-2 hidden">請至少選擇一位出席人員！</p>
+                    <p id="memberErrorHint" class="text-xs text-rose-600 mt-2 hidden">請至少勾選一位出席人員，或在下方設定「需要人員」讓大家報名！</p>
                     <div id="availHint" class="text-xs space-y-1.5 mt-3"></div>
+                </div>
+
+                <div class="bg-amber-50/60 border border-amber-200 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-xs font-bold text-amber-900">需要人員（選填）</label>
+                        <button type="button" onclick="addRole('')" class="text-xs text-amber-700 font-bold hover:underline">＋ 新增職位</button>
+                    </div>
+                    <p class="text-[11px] text-amber-800/80 mb-2">例如「音控 1 人、樂手 2 人」，夥伴可以自己在場次上按「我要報名」填空。</p>
+                    <div id="roleRows" class="space-y-2"></div>
+                    <div class="flex flex-wrap gap-1.5 mt-2">
+                        <span class="text-[11px] text-slate-500 self-center">快速加入：</span>
+                        <button type="button" onclick="addRole('音控')" class="text-xs px-2 py-1 rounded-lg bg-white border border-amber-200">音控</button>
+                        <button type="button" onclick="addRole('樂手')" class="text-xs px-2 py-1 rounded-lg bg-white border border-amber-200">樂手</button>
+                        <button type="button" onclick="addRole('歌手')" class="text-xs px-2 py-1 rounded-lg bg-white border border-amber-200">歌手</button>
+                        <button type="button" onclick="addRole('主持')" class="text-xs px-2 py-1 rounded-lg bg-white border border-amber-200">主持</button>
+                        <button type="button" onclick="addRole('燈光')" class="text-xs px-2 py-1 rounded-lg bg-white border border-amber-200">燈光</button>
+                        <button type="button" onclick="addRole('搬運')" class="text-xs px-2 py-1 rounded-lg bg-white border border-amber-200">搬運</button>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -237,6 +258,16 @@
                     <label class="block text-xs font-bold text-slate-700 mb-1">備註 / 集合時間 / 器材與服裝要求</label>
                     <textarea id="eventNotes" rows="3" maxlength="500" placeholder="例如：09:00 倉庫上車集合、穿著全黑西裝、自備耳返..."
                         class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">圖片（選填，最多 3 張：流程表、場地照、器材表…）</label>
+                    <div id="imgThumbs" class="flex flex-wrap gap-2"></div>
+                    <label id="imgAddBtn" class="mt-2 flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-indigo-400 rounded-xl py-3 text-sm text-slate-600 cursor-pointer bg-slate-50/50">
+                        ＋ 加入圖片
+                        <input type="file" id="imgInput" accept="image/*" multiple class="hidden" onchange="handleImageFiles(event)">
+                    </label>
+                    <p class="text-[11px] text-slate-400 mt-1">會自動壓縮；按儲存後上傳需要幾秒鐘。</p>
                 </div>
 
                 <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
@@ -381,6 +412,31 @@
         </div>
     </div>
 
+    <!-- 匯出 CSV -->
+    <div id="csvModal" data-backdrop class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full overflow-hidden fade-in">
+            <div class="px-6 py-4 bg-emerald-700 text-white flex items-center justify-between">
+                <h3 class="font-bold text-lg">匯出 CSV（給老闆看）</h3>
+                <button onclick="closeModal('csvModal')" class="text-emerald-100 hover:text-white w-9 h-9 rounded-lg flex items-center justify-center" aria-label="關閉"><i data-ic="x" data-cls="w-5 h-5"></i></button>
+            </div>
+            <div class="p-5 space-y-4 text-sm">
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">範圍</label>
+                    <select id="csvRange" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white">
+                        <option value="month">目前顯示的月份</option><option value="year">目前顯示的整年</option><option value="all">全部資料</option></select></div>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="csvStats" checked class="w-4 h-4 accent-emerald-600"> 最下面附上每個人的場次數</label>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="csvCancelled" class="w-4 h-4 accent-emerald-600"> 包含已取消的場次</label>
+                <p class="text-[11px] text-slate-400">下載的檔案可以用 Excel、Numbers 或 Google 試算表打開，也可以直接用 LINE 傳給老闆。</p>
+                <button type="button" onclick="downloadCsv()" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">下載 CSV</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 圖片放大 -->
+    <div id="lightbox" onclick="closeModal('lightbox')" class="fixed inset-0 bg-slate-950/90 z-[60] hidden items-center justify-center p-4 cursor-zoom-out">
+        <img id="lightboxImg" src="" alt="場次圖片" class="max-w-full max-h-[88vh] rounded-xl shadow-2xl object-contain bg-slate-900">
+        <span class="absolute top-4 right-4 text-white text-sm bg-white/15 px-3 py-1.5 rounded-full">點任意處關閉</span>
+    </div>
+
     <!-- 設定 -->
     <div id="settingsModal" data-backdrop class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-start justify-center p-4 overflow-y-auto">
         <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden fade-in my-4 sm:my-8">
@@ -442,7 +498,8 @@
 
                 <section class="space-y-3">
                     <h4 class="text-xs font-bold text-indigo-600 tracking-wider">備份</h4>
-                    <button type="button" onclick="exportData()" class="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 font-semibold text-slate-700">匯出備份檔</button>
+                    <button type="button" onclick="closeModal('settingsModal'); openModal('csvModal')" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold text-white">匯出 CSV（給老闆看）</button>
+                    <button type="button" onclick="exportData()" class="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 font-semibold text-slate-700">匯出備份檔 (JSON)</button>
                 </section>
 
                 <section class="space-y-3">
@@ -541,11 +598,19 @@
         const AV_TITLE = '__AV__';
         const CANCEL_PREFIX = '【已取消】';
         const K_PREFS = 'gig_prefs_v2';
+        const K_SIGN = 'gig_sign_v2';
+        const K_IMG = 'gig_img_v2';
+        const SIGN_TITLE = '__SIGN__';
+        const IMG_TITLE = '__IMG__';
+        const IMG_ROW_CHARS = 720 * 60;            // 每一列最多放的圖片字元數（試算表一格上限 5 萬字）
+        const IMG_MAX_CHARS = IMG_ROW_CHARS * 2;   // 每張圖片壓縮到最多 2 列
+        const MAX_IMAGES = 3;
 
         // 每次更新網頁時，APP_BUILD 要加 1，並同步修改 version.json，大家才會收到「有新版本」提示
-        const APP_VERSION = '1.4';
-        const APP_BUILD = 5;
+        const APP_VERSION = '1.5';
+        const APP_BUILD = 6;
         const CHANGELOG = [
+            { v: '1.5', date: '11/17', items: ['場次可以上傳圖片（最多 3 張，自動壓縮），點縮圖可放大', '新增「匯出 CSV（給老闆）」：可選本月／整年／全部，附每人場次統計', '場次可設定「需要人員」（例如音控 1、樂手 2），夥伴可自己按「我要報名」填空，月曆會顯示還缺幾人'] },
             { v: '1.4', date: '11/7', items: ['新增「設定」頁：預設畫面、預設時間、每週起始日、更新頻率等', '新增「更新日記」（就是這裡）', '有新版本時會跳出「立即更新」提示，不用再自己清暫存'] },
             { v: '1.3', date: '11/7', items: ['登記可不可可以一次選很多天，並有「選週末」「選整個月」快速選取'] },
             { v: '1.2', date: '11/7', items: ['新增「可不可」：可登記全天可、不可、或幾點後才可／幾點前要結束', '月曆顯示每天誰可誰不可；排場次時會提醒', '場次可標記「已取消」（劃掉、不算場次數）'] },
@@ -602,6 +667,10 @@
         let prefs = { ...DEFAULT_PREFS };
         let pollTimer = null;
         let startFilterApplied = false;
+        let signups = [];
+        let images = [];
+        let modalRoles = [];
+        let modalImages = [];
 
         /**************************************************************
          * 共用小工具
@@ -676,7 +745,9 @@
             const ok1 = store.set(K_MEMBERS, JSON.stringify(members));
             const ok2 = store.set(K_EVENTS, JSON.stringify(events));
             const ok3 = store.set(K_AVAIL, JSON.stringify(avail));
-            if (!ok1 || !ok2 || !ok3) showToast('這個瀏覽器無法儲存資料，重新整理後會消失', 'error');
+            const ok4 = store.set(K_SIGN, JSON.stringify(signups));
+            const ok5 = store.set(K_IMG, JSON.stringify(images));
+            if (!ok1 || !ok2 || !ok3 || !ok4 || !ok5) showToast('這個瀏覽器無法儲存資料，重新整理後會消失', 'error');
         }
 
         async function api(body) {
@@ -719,8 +790,8 @@
         function applyServerData(r) {
             members = Array.isArray(r.members) ? r.members : [];
             const sp = splitRows(Array.isArray(r.events) ? r.events : []);
-            events = sp.ev; avail = sp.av;
-            store.set(K_CACHE, JSON.stringify({ members, events, avail }));
+            events = sp.ev; avail = sp.av; signups = sp.sg; images = sp.im;
+            store.set(K_CACHE, JSON.stringify({ members, events, avail, signups }));
             if (!startFilterApplied) {
                 startFilterApplied = true;
                 if (prefs.defaultFilter === 'me' && getMemberById(me)) selectedMemberId = me;
@@ -829,7 +900,7 @@
                     <span class="text-sm font-extrabold">${monthEvents.length} <span class="text-[11px] font-normal opacity-75">場</span></span>
                 </div>`;
             members.forEach(m => {
-                const count = monthEvents.filter(ev => ev.attendees.includes(m.id)).length;
+                const count = monthEvents.filter(ev => attendeesOf(ev).includes(m.id)).length;
                 const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
                 const sel = selectedMemberId === m.id;
                 html += `
@@ -870,7 +941,7 @@
                 const dayEvents = events.filter(ev => ev.date === dateStr && (prefs.showCancelled || !isCancelled(ev))).sort(compareEvents);
                 const isToday = dateStr === today;
                 const dow = new Date(currentYear, currentMonth, day).getDay();
-                const hasMine = sm && dayEvents.some(ev => ev.attendees.includes(sm.id));
+                const hasMine = sm && dayEvents.some(ev => attendeesOf(ev).includes(sm.id));
                 const cellBg = hasMine ? 'bg-indigo-50/40 hover:bg-indigo-50/70' : 'bg-white hover:bg-slate-50/80';
                 html += `
                     <div data-act="newOn" data-date="${dateStr}" class="min-h-[84px] sm:min-h-[128px] ${cellBg} p-1 sm:p-2 transition cursor-pointer flex flex-col group relative">
@@ -891,9 +962,9 @@
         }
 
         function renderCalendarEventPill(ev) {
-            const mine = selectedMemberId === 'ALL' || ev.attendees.includes(selectedMemberId);
+            const mine = selectedMemberId === 'ALL' || attendeesOf(ev).includes(selectedMemberId);
             const cls = mine ? 'opacity-100 border-slate-200 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/50' : 'opacity-30 bg-slate-50 border-slate-100 hover:opacity-75';
-            const badges = ev.attendees.map(id => {
+            const badges = attendeesOf(ev).map(id => {
                 const m = getMemberById(id);
                 if (!m) return '';
                 const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
@@ -905,6 +976,7 @@
                     <div class="text-[10px] text-slate-500 font-semibold leading-tight">${escapeHtml(ev.startTime)}</div>
                     <div class="hidden sm:block text-xs font-bold text-slate-800 truncate mt-0.5 ${isCancelled(ev) ? 'line-through text-slate-400' : ''}">${escapeHtml(cleanTitle(ev))}</div>
                     ${isCancelled(ev) ? '<div class="text-[9px] font-bold text-rose-600 leading-tight">已取消</div>' : ''}
+                    ${openSlots(ev) ? `<div class="text-[9px] font-bold text-white bg-rose-500 rounded px-1 inline-block leading-tight mt-0.5">缺${openSlots(ev)}人</div>` : ''}${evImages(ev.id).length ? `<span class="text-[9px] text-indigo-500 ml-0.5">🖼</span>` : ''}
                     <div class="flex flex-wrap gap-0.5 sm:gap-1 mt-0.5 sm:mt-1">${badges}</div>
                 </div>`;
         }
@@ -916,7 +988,7 @@
             const sm = selectedMemberId === 'ALL' ? null : getMemberById(selectedMemberId);
             let filtered = events.filter(ev => ev.date.startsWith(monthPrefix()) && (prefs.showCancelled || !isCancelled(ev)));
             if (sm) {
-                filtered = filtered.filter(ev => ev.attendees.includes(sm.id));
+                filtered = filtered.filter(ev => attendeesOf(ev).includes(sm.id));
                 document.getElementById('listHeaderTitle').textContent = `${sm.name} 的個人場次`;
                 document.getElementById('listHeaderSubtitle').textContent = `${currentYear}年${currentMonth + 1}月 已安排的出勤行程`;
             } else {
@@ -946,14 +1018,35 @@
             const weekdays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
             container.innerHTML = filtered.map(ev => {
                 const d = new Date(ev.date + 'T00:00:00');
-                const pills = ev.attendees.map(id => {
+                const pills = attendeesOf(ev).map(id => {
                     const m = getMemberById(id);
                     if (!m) return '';
                     const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
                     return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${theme.bg} ${theme.text} border ${theme.border} ${selectedMemberId === id ? 'ring-2 ring-indigo-600' : ''}">
                         <span class="w-2 h-2 rounded-full ${theme.badgeBg}"></span>${escapeHtml(m.name)}</span>`;
-                }).join('') || `<span class="text-xs text-rose-600 font-medium">尚未指派出席人員</span>`;
+                }).join('') || `<span class="text-xs text-rose-600 font-medium">尚未有人出席</span>`;
                 const url = mapUrlFor(ev);
+                const slots = openSlots(ev);
+                const rolesHtml = (ev.roles || []).length ? `
+                        <div class="bg-amber-50/70 border border-amber-200/70 rounded-xl p-2.5">
+                            <div class="text-[11px] font-bold mb-1.5 ${slots ? 'text-rose-600' : 'text-emerald-700'}">需要人員：${isCancelled(ev) ? '（已取消）' : slots ? `還缺 ${slots} 人` : '已補齊 ✓'}</div>
+                            <div class="space-y-1.5">${ev.roles.map(r => {
+                                const ss = signsOf(ev, r.id);
+                                const mineIn = ss.some(s => s.memberId === me);
+                                const fills = ss.map(s => {
+                                    const m = getMemberById(s.memberId);
+                                    const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
+                                    return `<span class="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-xs font-bold ${theme.bg} ${theme.text} border ${theme.border}">${escapeHtml(m.name)}<button data-act="unsign" data-id="${escapeHtml(s.id)}" class="w-5 h-5 rounded-full hover:bg-white/70 text-[11px]" aria-label="取消報名">✕</button></span>`;
+                                }).join('');
+                                const empty = Math.max(0, r.count - ss.length);
+                                const btn = !isCancelled(ev) && empty > 0 && !mineIn
+                                    ? `<button data-act="signup" data-id="${escapeHtml(ev.id)}" data-role="${escapeHtml(r.id)}" class="px-2.5 py-1 rounded-full border-2 border-dashed border-indigo-300 text-indigo-600 text-xs font-bold hover:bg-indigo-50">＋ 我要報名</button>` : '';
+                                return `<div class="flex flex-wrap items-center gap-1.5">
+                                    <span class="text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-0.5">${escapeHtml(r.name)} ${ss.length}/${r.count}</span>${fills}${btn}</div>`;
+                            }).join('')}</div>
+                        </div>` : '';
+                const imgs = evImages(ev.id);
+                const imgsHtml = imgs.length ? `<div class="flex flex-wrap gap-2">${imgs.map(i => `<button data-act="img" data-id="${escapeHtml(ev.id)}" data-img="${escapeHtml(i.id)}" class="w-20 h-20 rounded-lg overflow-hidden border border-slate-200"><img src="${i.data}" alt="場次圖片" class="w-full h-full object-cover"></button>`).join('')}</div>` : '';
                 return `
                     <div class="bg-white rounded-xl border border-slate-200/90 hover:border-indigo-300 hover:shadow-md transition p-4 space-y-3 ${isCancelled(ev) ? 'grayscale opacity-80' : ''}">
                         <div class="flex items-start justify-between gap-2">
@@ -973,6 +1066,7 @@
                             <div class="text-[11px] font-bold text-slate-400 mb-1.5">當日出勤夥伴：</div>
                             <div class="flex flex-wrap gap-1.5">${pills}</div>
                         </div>
+                        ${rolesHtml}
                         ${ev.location || url ? `
                         <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-100 flex items-center justify-between gap-2">
                             <div class="flex items-center gap-2 text-xs text-slate-700 min-w-0">
@@ -982,6 +1076,7 @@
                             ${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition flex items-center gap-1">${ic('nav', 'w-3.5 h-3.5')}<span>導航</span></a>` : ''}
                         </div>` : ''}
                         ${ev.notes ? `<div class="text-xs text-slate-600 bg-amber-50/70 border border-amber-200/60 rounded-lg p-2.5 leading-relaxed whitespace-pre-line break-words">${escapeHtml(ev.notes)}</div>` : ''}
+                        ${imgsHtml}
                     </div>`;
             }).join('');
         }
@@ -1024,6 +1119,8 @@
                 document.getElementById('eventMapUrl').value = ev.mapUrl || '';
                 document.getElementById('eventNotes').value = ev.notes || '';
                 renderModalMemberCheckboxes(ev.attendees);
+                modalRoles = clone(ev.roles || []);
+                modalImages = evImages(ev.id).map(i => ({ ...i }));
                 deleteBtn.classList.remove('hidden');
             } else {
                 document.getElementById('eventModalTitle').textContent = '新增做場場次';
@@ -1038,9 +1135,13 @@
                 document.getElementById('eventNotes').value = '';
                 const pre = selectedMemberId !== 'ALL' ? [selectedMemberId] : (getMemberById(me) ? [me] : []);
                 renderModalMemberCheckboxes(pre);
+                modalRoles = [];
+                modalImages = [];
                 deleteBtn.classList.add('hidden');
             }
             updateTimeHint();
+            renderRoleRows();
+            renderImgThumbs();
             openModal('eventModal');
         }
 
@@ -1091,7 +1192,8 @@
         function saveEvent(e) {
             e.preventDefault();
             const attendees = checkedAttendees();
-            if (attendees.length === 0) { document.getElementById('memberErrorHint').classList.remove('hidden'); return; }
+            const roles = modalRoles.map(r => ({ id: r.id, name: r.name.trim(), count: Math.max(1, Math.min(20, Number(r.count) || 1)) })).filter(r => r.name);
+            if (attendees.length === 0 && roles.length === 0) { document.getElementById('memberErrorHint').classList.remove('hidden'); return; }
             const id = document.getElementById('eventId').value;
             const date = document.getElementById('eventDate').value;
             const editor = getMemberById(me);
@@ -1104,6 +1206,7 @@
                 location: document.getElementById('eventLocation').value.trim(),
                 mapUrl: safeUrl(document.getElementById('eventMapUrl').value.trim()),
                 attendees,
+                roles,
                 notes: document.getElementById('eventNotes').value.trim(),
                 updatedBy: editor ? editor.name : '',
                 updatedAt: Date.now()
@@ -1111,25 +1214,214 @@
             const idx = events.findIndex(x => x.id === id);
             if (id && idx !== -1) events[idx] = data; else events.push(data);
 
+            const bodies = [{ action: 'upsertEvent', event: evToRow(data) }];
+            // 被刪掉的職位 → 一併清掉報名
+            const roleIds = roles.map(r => r.id);
+            const goneSigns = signups.filter(s => s.evId === data.id && !roleIds.includes(s.roleId));
+            signups = signups.filter(s => !goneSigns.includes(s));
+            goneSigns.forEach(s => bodies.push({ action: 'deleteEvent', id: s.id }));
+            // 日期改了 → 報名列也更新日期（試算表比較好讀）
+            signups.filter(s => s.evId === data.id && s.date !== date).forEach(s => { s.date = date; bodies.push({ action: 'upsertEvent', event: signToRow(s) }); });
+            // 圖片：新增的上傳、被移除的刪掉
+            const keepIds = modalImages.map(i => i.id);
+            const goneImgs = images.filter(i => i.evId === data.id && !keepIds.includes(i.id));
+            goneImgs.forEach(i => imgRowIds(i).forEach(rid => bodies.push({ action: 'deleteEvent', id: rid })));
+            const newImgs = modalImages.filter(i => i.isNew).map(i => ({ id: i.id, evId: data.id, n: i.n, data: i.data }));
+            newImgs.forEach(i => imgToRows(i, date).forEach(row => bodies.push({ action: 'upsertEvent', event: row })));
+            images = images.filter(i => i.evId !== data.id || keepIds.includes(i.id)).concat(newImgs);
+
             const [y, m] = date.split('-').map(Number);
             currentYear = y; currentMonth = m - 1;
             closeModal('eventModal');
             renderAll();
-            showToast(id ? '場次資訊已更新' : '已新增場次');
-            commit({ action: 'upsertEvent', event: data });
+            showToast(newImgs.length ? `已儲存，圖片上傳中…（${newImgs.length} 張）` : (id ? '場次資訊已更新' : '已新增場次'));
+            commitMany(bodies);
         }
 
         async function deleteCurrentEvent() {
             const id = document.getElementById('eventId').value;
             const ev = events.find(x => x.id === id);
             if (!ev) return;
-            const ok = await askConfirm(`確定要刪除這場嗎？\n\n${ev.date}　${ev.title}\n\n刪除後所有人都會看不到。`, '刪除');
+            const ok = await askConfirm(`確定要刪除這場嗎？\n\n${ev.date}　${cleanTitle(ev)}\n\n刪除後所有人都會看不到（報名和圖片也會一起刪除）。`, '刪除');
             if (!ok) return;
+            const bodies = [{ action: 'deleteEvent', id }];
+            signups.filter(s => s.evId === id).forEach(s => bodies.push({ action: 'deleteEvent', id: s.id }));
+            evImages(id).forEach(i => imgRowIds(i).forEach(rid => bodies.push({ action: 'deleteEvent', id: rid })));
             events = events.filter(x => x.id !== id);
+            signups = signups.filter(s => s.evId !== id);
+            images = images.filter(i => i.evId !== id);
             closeModal('eventModal');
             renderAll();
             showToast('場次已刪除');
-            commit({ action: 'deleteEvent', id });
+            commitMany(bodies);
+        }
+
+        /**************************************************************
+         * 需要人員（職位）編輯 / 報名
+         **************************************************************/
+        function addRole(name) {
+            modalRoles.push({ id: uid('r').slice(0, 6), name, count: 1 });
+            renderRoleRows();
+            if (!name) { const inputs = document.querySelectorAll('#roleRows input'); inputs[inputs.length - 1]?.focus(); }
+            document.getElementById('memberErrorHint').classList.add('hidden');
+        }
+        function renderRoleRows() {
+            const id = document.getElementById('eventId').value;
+            const ev = events.find(x => x.id === id);
+            document.getElementById('roleRows').innerHTML = modalRoles.map((r, i) => {
+                const n = ev ? signsOf(ev, r.id).length : 0;
+                return `<div class="flex items-center gap-2">
+                    <input type="text" value="${escapeHtml(r.name)}" maxlength="10" placeholder="職位，例：音控" data-role-name="${i}" class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+                    <select data-role-count="${i}" class="px-2 py-2 rounded-lg border border-slate-300 bg-white text-sm">${Array.from({ length: 20 }, (_, k) => `<option value="${k + 1}" ${r.count === k + 1 ? 'selected' : ''}>${k + 1} 人</option>`).join('')}</select>
+                    ${n ? `<span class="text-[11px] text-slate-500 shrink-0">已報${n}</span>` : ''}
+                    <button type="button" data-act="rmRole" data-idx="${i}" class="w-9 h-9 shrink-0 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center" aria-label="刪除職位">${ic('trash', 'w-4 h-4')}</button>
+                </div>`;
+            }).join('');
+        }
+        async function removeRole(i) {
+            const r = modalRoles[i];
+            const id = document.getElementById('eventId').value;
+            const ev = events.find(x => x.id === id);
+            const n = ev && r ? signsOf(ev, r.id).length : 0;
+            if (n) {
+                const ok = await askConfirm(`「${r.name}」已經有 ${n} 人報名，刪除這個職位會一起取消他們的報名（按儲存後生效）。`, '刪除');
+                if (!ok) return;
+            }
+            modalRoles.splice(i, 1);
+            renderRoleRows();
+        }
+
+        async function signUp(evId, roleId) {
+            const ev = events.find(x => x.id === evId);
+            const role = ev && (ev.roles || []).find(r => r.id === roleId);
+            if (!role) return;
+            if (!getMemberById(me)) { showToast('請先選「我是誰」，再按一次報名'); openSyncModal(true); return; }
+            const ss = signsOf(ev, roleId);
+            if (ss.some(s => s.memberId === me)) return;
+            if (ss.length >= role.count) { showToast('這個職位已經額滿了', 'error'); return; }
+            const meName = getMemberById(me).name;
+            const r = checkAvail(me, ev.date, ev.startTime, ev.endTime);
+            let msg = `確定要用「${meName}」報名嗎？\n\n${ev.date}　${cleanTitle(ev)}\n職位：${role.name}`;
+            if (r.level === 'bad' || r.level === 'warn') msg += `\n\n⚠ 你登記的時間：${r.text}`;
+            const ok = await askConfirm(msg, '報名');
+            if (!ok) return;
+            const s = { id: `sg_${evId}_${roleId}_${me}`, evId, roleId, memberId: me, date: ev.date };
+            signups = signups.filter(x => x.id !== s.id).concat(s);
+            renderAll();
+            showToast(`已報名：${role.name}`);
+            commit({ action: 'upsertEvent', event: signToRow(s) });
+        }
+        async function unSign(signId) {
+            const s = signups.find(x => x.id === signId);
+            if (!s) return;
+            const m = getMemberById(s.memberId);
+            const ok = await askConfirm(`要取消「${m ? m.name : ''}」的報名嗎？`, '取消報名');
+            if (!ok) return;
+            signups = signups.filter(x => x.id !== signId);
+            renderAll();
+            showToast('已取消報名');
+            commit({ action: 'deleteEvent', id: signId });
+        }
+
+        /**************************************************************
+         * 圖片：壓縮、預覽、放大
+         **************************************************************/
+        function loadImg(file) {
+            return new Promise((res, rej) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => { URL.revokeObjectURL(url); res(img); };
+                img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('bad image')); };
+                img.src = url;
+            });
+        }
+        async function compressImage(file) {
+            const img = await loadImg(file);
+            let max = 1280, q = 0.72, out = '';
+            for (let t = 0; t < 14; t++) {
+                const s = Math.min(1, max / Math.max(img.width, img.height));
+                const c = document.createElement('canvas');
+                c.width = Math.max(1, Math.round(img.width * s)); c.height = Math.max(1, Math.round(img.height * s));
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+                out = c.toDataURL('image/jpeg', q);
+                if (out.split(',')[1].length <= IMG_MAX_CHARS) break;
+                if (q > 0.45) q -= 0.1; else max = Math.round(max * 0.8);
+            }
+            return out;
+        }
+        async function handleImageFiles(e) {
+            const files = Array.from(e.target.files || []);
+            e.target.value = '';
+            const room = MAX_IMAGES - modalImages.length;
+            if (room <= 0) { showToast(`每場最多 ${MAX_IMAGES} 張圖片`, 'error'); return; }
+            if (files.length > room) showToast(`每場最多 ${MAX_IMAGES} 張，只會加入前 ${room} 張`, 'error');
+            for (const f of files.slice(0, room)) {
+                try {
+                    const data = await compressImage(f);
+                    const n = Math.ceil(data.split(',')[1].length / IMG_ROW_CHARS);
+                    modalImages.push({ id: uid('i').slice(0, 6), data, n, isNew: true });
+                    renderImgThumbs();
+                } catch (err) { showToast('這張圖片讀不出來，請換一張', 'error'); }
+            }
+        }
+        function renderImgThumbs() {
+            document.getElementById('imgThumbs').innerHTML = modalImages.map((i, k) => `
+                <div class="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200">
+                    <img src="${i.data}" alt="預覽" class="w-full h-full object-cover">
+                    <button type="button" data-act="rmImg" data-idx="${k}" class="absolute top-1 right-1 w-6 h-6 rounded-full bg-rose-600 text-white text-xs flex items-center justify-center shadow" aria-label="移除圖片">✕</button>
+                </div>`).join('');
+            document.getElementById('imgAddBtn').classList.toggle('hidden', modalImages.length >= MAX_IMAGES);
+        }
+        function openLightbox(evId, imgId) {
+            const i = images.find(x => x.evId === evId && x.id === imgId);
+            if (!i) return;
+            document.getElementById('lightboxImg').src = i.data;
+            openModal('lightbox');
+        }
+
+        /**************************************************************
+         * 匯出 CSV（給老闆）
+         **************************************************************/
+        function downloadCsv() {
+            const range = document.getElementById('csvRange').value;
+            const withStats = document.getElementById('csvStats').checked;
+            const withCancelled = document.getElementById('csvCancelled').checked;
+            let list = events.filter(ev => range === 'month' ? ev.date.startsWith(monthPrefix()) : range === 'year' ? ev.date.startsWith(String(currentYear)) : true);
+            if (!withCancelled) list = list.filter(ev => !isCancelled(ev));
+            list.sort(compareEvents);
+            const wd = ['日', '一', '二', '三', '四', '五', '六'];
+            const rows = [['日期', '星期', '開始', '結束', '場次', '地點', '狀態', '出席人員', '出席人數', '需要人員', '缺額', '備註', '最後修改者']];
+            list.forEach(ev => {
+                const names = attendeesOf(ev).map(id => getMemberById(id).name);
+                rows.push([
+                    ev.date, '週' + wd[new Date(ev.date + 'T00:00:00').getDay()], ev.startTime || '', ev.endTime || '',
+                    cleanTitle(ev), ev.location || '', isCancelled(ev) ? '已取消' : '正常',
+                    names.join('、'), names.length,
+                    (ev.roles || []).map(r => `${r.name} ${signsOf(ev, r.id).length}/${r.count}`).join('；'),
+                    (ev.roles || []).length && !isCancelled(ev) ? openSlots(ev) : '',
+                    ev.notes || '', ev.updatedBy || ''
+                ]);
+            });
+            if (withStats) {
+                const real = list.filter(ev => !isCancelled(ev));
+                rows.push([]);
+                rows.push(['人員', '場次數']);
+                members.forEach(m => rows.push([m.name, real.filter(ev => attendeesOf(ev).includes(m.id)).length]));
+                rows.push(['總場次', real.length]);
+            }
+            const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+            const csv = '﻿' + rows.map(r => r.map(esc).join(',')).join('\r\n');
+            const label = range === 'month' ? monthPrefix() : range === 'year' ? String(currentYear) : '全部';
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `做場紀錄_${label}.csv`;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            closeModal('csvModal');
+            showToast(`已匯出 ${list.length} 場`);
         }
 
         /**************************************************************
@@ -1181,20 +1473,23 @@
         async function removeMember(id) {
             const m = getMemberById(id);
             if (!m) return;
-            const n = events.filter(ev => ev.attendees.includes(id)).length;
+            const n = events.filter(ev => attendeesOf(ev).includes(id)).length;
             const ok = await askConfirm(`確定要移除「${m.name}」嗎？\n${n > 0 ? `他在 ${n} 個場次的出席標記也會一併清掉。` : '他目前沒有被排在任何場次。'}`, '移除');
             if (!ok) return;
             members = members.filter(x => x.id !== id);
             events.forEach(ev => { ev.attendees = ev.attendees.filter(a => a !== id); });
             const goneAvail = avail.filter(a => a.memberId === id);
             avail = avail.filter(a => a.memberId !== id);
+            const goneSign = signups.filter(s => s.memberId === id);
+            signups = signups.filter(s => s.memberId !== id);
             if (selectedMemberId === id) selectedMemberId = 'ALL';
             if (me === id) { me = ''; store.set(K_ME, ''); }
             renderMemberManageList();
             renderAll();
             showToast('成員已移除');
             await commit({ action: 'deleteMember', id });
-            for (const a of goneAvail) await commit({ action: 'deleteEvent', id: a.id });
+            const extra = goneAvail.map(a => a.id).concat(goneSign.map(s => s.id));
+            if (extra.length) await commitMany(extra.map(x => ({ action: 'deleteEvent', id: x })));
         }
 
         /**************************************************************
@@ -1241,7 +1536,7 @@
             let list = events.filter(ev => ev.date.startsWith(monthPrefix())).sort(compareEvents);
             let head = `📢 【${currentYear}年${currentMonth + 1}月 做場出勤排班表】`;
             const sm = selectedMemberId === 'ALL' ? null : getMemberById(selectedMemberId);
-            if (sm) { list = list.filter(ev => ev.attendees.includes(sm.id)); head = `📢 【${currentYear}年${currentMonth + 1}月 ${sm.name} 個人場次表】`; }
+            if (sm) { list = list.filter(ev => attendeesOf(ev).includes(sm.id)); head = `📢 【${currentYear}年${currentMonth + 1}月 ${sm.name} 個人場次表】`; }
             const cancelledList = list.filter(isCancelled);
             list = list.filter(ev => !isCancelled(ev));
             const wd = ['日', '一', '二', '三', '四', '五', '六'];
@@ -1249,10 +1544,12 @@
             if (list.length === 0) lines.push('本月目前尚無安排場次。');
             list.forEach((ev, i) => {
                 const d = new Date(ev.date + 'T00:00:00');
-                const names = ev.attendees.map(id => getMemberById(id)?.name).filter(Boolean).join('、') || '尚未指派';
+                const names = attendeesOf(ev).map(id => getMemberById(id)?.name).filter(Boolean).join('、') || '尚未指派';
                 lines.push(`${i + 1}. 📅 ${d.getMonth() + 1}/${d.getDate()}(${wd[d.getDay()]}) ${fmtRange(ev)}`);
                 lines.push(`   🎵 場次：${cleanTitle(ev)}`);
                 lines.push(`   👥 出席：【${names}】`);
+                const need = (ev.roles || []).map(r => [r.name, r.count - signsOf(ev, r.id).length]).filter(x => x[1] > 0);
+                if (need.length) lines.push(`   🙋 還缺：${need.map(x => `${x[0]}${x[1]}人`).join('、')}（請到網頁報名）`);
                 if (ev.location) lines.push(`   📍 地點：${ev.location}`);
                 if (ev.notes) lines.push(`   📝 備註：${ev.notes}`);
                 lines.push('');
@@ -1283,7 +1580,7 @@
         }
 
         function exportData() {
-            const payload = { version: 2, exportedAt: new Date().toISOString(), members, events, avail };
+            const payload = { version: 2, exportedAt: new Date().toISOString(), members, events, avail, signups, images };
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1322,7 +1619,7 @@
             if (!ok) return;
             members = clone(DEFAULT_MEMBERS);
             events = buildDemoEvents();
-            avail = [];
+            avail = []; signups = []; images = [];
             selectedMemberId = 'ALL';
             goToToday();
             saveLocal();
@@ -1339,15 +1636,67 @@
         function cleanTitle(ev) { return isCancelled(ev) ? ev.title.slice(CANCEL_PREFIX.length) : ev.title; }
 
         function splitRows(rows) {
-            const ev = [], av = [];
+            const ev = [], av = [], sg = [], parts = {};
             rows.forEach(r => {
+                const att = r.attendees || [];
                 if (r.title === AV_TITLE) {
-                    const mid = (r.attendees || [])[0];
+                    const mid = att[0];
                     if (mid) av.push({ id: r.id, date: r.date, memberId: mid, status: r.notes === 'no' ? 'no' : (r.notes === 'part' ? 'part' : 'yes'), from: r.startTime || '', to: r.endTime || '' });
-                } else ev.push(r);
+                } else if (r.title === SIGN_TITLE) {
+                    if (att[0] && r.location) sg.push({ id: r.id, evId: r.location, roleId: r.notes, memberId: att[0], date: r.date });
+                } else if (r.title === IMG_TITLE) {
+                    const k = `${r.location}|${r.notes}`;
+                    const p = parts[k] || (parts[k] = { evId: r.location, id: r.notes, n: Number(r.endTime) || 1, chunks: [] });
+                    p.chunks[Number(r.startTime) || 0] = att.join('');
+                } else if (!r.title.startsWith('__')) {
+                    const ids = [], chunks = [];
+                    att.forEach(a => a.startsWith('~') ? chunks.push(a.slice(1)) : ids.push(a));
+                    let roles = [];
+                    if (chunks.length) { try { roles = JSON.parse(decodeURIComponent(chunks.join(''))); } catch (e) { roles = []; } }
+                    ev.push({ ...r, attendees: ids, roles: Array.isArray(roles) ? roles : [] });
+                }
             });
-            return { ev, av };
+            const im = Object.values(parts)
+                .filter(p => p.chunks.filter(Boolean).length === p.n)
+                .map(p => ({ id: p.id, evId: p.evId, n: p.n, data: 'data:image/jpeg;base64,' + p.chunks.join('') }));
+            return { ev, av, sg, im };
         }
+        // 場次寫回試算表時：「需要人員」編碼後藏在出席人員欄（以 ~ 開頭），不用改 Apps Script
+        function evToRow(ev) {
+            const enc = (ev.roles && ev.roles.length) ? encodeURIComponent(JSON.stringify(ev.roles)) : '';
+            const chunks = enc ? enc.match(/.{1,59}/g).map(c => '~' + c) : [];
+            const row = { ...ev, attendees: [...ev.attendees, ...chunks] };
+            delete row.roles;
+            return row;
+        }
+        function signToRow(s) {
+            const editor = getMemberById(me);
+            return { id: s.id, title: SIGN_TITLE, date: s.date, startTime: '', endTime: '', location: s.evId, mapUrl: '', attendees: [s.memberId], notes: s.roleId, updatedBy: editor ? editor.name : '', updatedAt: Date.now() };
+        }
+        function imgRowIds(img) { return Array.from({ length: img.n }, (_, k) => `im_${img.evId}_${img.id}_${k}`); }
+        function imgToRows(img, date) {
+            const b64 = img.data.split(',')[1];
+            const editor = getMemberById(me);
+            return imgRowIds(img).map((id, k) => ({
+                id, title: IMG_TITLE, date, startTime: String(k), endTime: String(img.n), location: img.evId, mapUrl: '',
+                attendees: b64.slice(k * IMG_ROW_CHARS, (k + 1) * IMG_ROW_CHARS).match(/.{1,60}/g) || [],
+                notes: img.id, updatedBy: editor ? editor.name : '', updatedAt: Date.now()
+            }));
+        }
+
+        // 某場實際出席的人 = 直接勾選的 + 自己報名的
+        function attendeesOf(ev) {
+            const set = new Set(ev.attendees || []);
+            signups.forEach(s => { if (s.evId === ev.id) set.add(s.memberId); });
+            return [...set].filter(id => getMemberById(id));
+        }
+        function signsOf(ev, roleId) { return signups.filter(s => s.evId === ev.id && s.roleId === roleId && getMemberById(s.memberId)); }
+        function openSlots(ev) {
+            if (isCancelled(ev)) return 0;
+            return (ev.roles || []).reduce((n, r) => n + Math.max(0, r.count - signsOf(ev, r.id).length), 0);
+        }
+        function evImages(evId) { return images.filter(i => i.evId === evId); }
+
         function avToRow(a) {
             const editor = getMemberById(me);
             return { id: a.id, title: AV_TITLE, date: a.date, startTime: a.from || '', endTime: a.to || '', location: '', mapUrl: '', attendees: [a.memberId], notes: a.status, updatedBy: editor ? editor.name : '', updatedAt: Date.now() };
@@ -1443,7 +1792,7 @@
             for (let d = 1; d <= days; d++) {
                 const date = `${monthPrefix()}-${pad(d)}`;
                 const a = getAvail(mid, date);
-                const hasEv = events.some(ev => ev.date === date && !isCancelled(ev) && ev.attendees.includes(mid));
+                const hasEv = events.some(ev => ev.date === date && !isCancelled(ev) && attendeesOf(ev).includes(mid));
                 html += `<button type="button" data-act="avPick" data-date="${date}" class="h-12 rounded-lg border text-sm font-bold flex flex-col items-center justify-center leading-tight ${AV_CLS[a ? a.status : 'none']} ${avSel.includes(date) ? 'ring-2 ring-indigo-600 ring-offset-1' : ''}">
                     <span>${d}</span><span class="text-[9px] font-semibold">${a ? escapeHtml(availShort(a)) : ''}</span>${hasEv ? '<span class="w-1.5 h-1.5 rounded-full bg-indigo-600 mt-0.5"></span>' : ''}</button>`;
             }
@@ -1614,7 +1963,7 @@
             key = '';
             store.set(K_KEY, '');
             store.set(K_CACHE, '');
-            members = []; events = []; avail = [];
+            members = []; events = []; avail = []; signups = []; images = [];
             renderAll();
             closeModal('settingsModal');
             setSync('needkey');
@@ -1657,7 +2006,7 @@
                 document.getElementById('resetSep').classList.add('hidden');
                 try {
                     const c = JSON.parse(store.get(K_CACHE) || 'null');
-                    if (c && Array.isArray(c.members) && Array.isArray(c.events)) { members = c.members; events = c.events; avail = Array.isArray(c.avail) ? c.avail : []; }
+                    if (c && Array.isArray(c.members) && Array.isArray(c.events)) { members = c.members; events = c.events; avail = Array.isArray(c.avail) ? c.avail : []; signups = Array.isArray(c.signups) ? c.signups : []; }
                 } catch (e) { /* 沒有快取就等網路 */ }
                 renderSyncChip();
                 renderAll();
@@ -1671,6 +2020,8 @@
                     members = sm ? JSON.parse(sm) : clone(DEFAULT_MEMBERS);
                     events = se ? JSON.parse(se) : buildDemoEvents();
                     avail = JSON.parse(store.get(K_AVAIL) || '[]');
+                    signups = JSON.parse(store.get(K_SIGN) || '[]');
+                    images = JSON.parse(store.get(K_IMG) || '[]');
                 } catch (e) { members = clone(DEFAULT_MEMBERS); events = buildDemoEvents(); }
                 renderSyncChip();
                 renderAll();
@@ -1692,8 +2043,20 @@
                 else if (act === 'newOn') openEventModal(null, date);
                 else if (act === 'rmMember') removeMember(id);
                 else if (act === 'avPick') pickAvailDay(date);
+                else if (act === 'signup') signUp(id, t.dataset.role);
+                else if (act === 'unsign') unSign(id);
+                else if (act === 'img') openLightbox(id, t.dataset.img);
+                else if (act === 'rmRole') removeRole(Number(t.dataset.idx));
+                else if (act === 'rmImg') { modalImages.splice(Number(t.dataset.idx), 1); renderImgThumbs(); }
+            });
+            document.addEventListener('input', e => {
+                const d = e.target.dataset || {};
+                if (d.roleName !== undefined && modalRoles[d.roleName]) modalRoles[d.roleName].name = e.target.value;
+                if (d.roleCount !== undefined && modalRoles[d.roleCount]) modalRoles[d.roleCount].count = Number(e.target.value);
             });
             document.addEventListener('change', e => {
+                const d = e.target.dataset || {};
+                if (d.roleCount !== undefined && modalRoles[d.roleCount]) modalRoles[d.roleCount].count = Number(e.target.value);
                 if (e.target.dataset && e.target.dataset.rename) renameMember(e.target.dataset.rename, e.target.value);
             });
             document.querySelectorAll('[data-backdrop]').forEach(el => {
@@ -1702,7 +2065,8 @@
             document.addEventListener('keydown', e => {
                 if (e.key !== 'Escape') return;
                 if (isOpen('confirmModal')) resolveConfirm(false);
-                else ['eventModal', 'memberModal', 'lineSummaryModal', 'syncModal', 'availModal', 'settingsModal'].some(id => { if (isOpen(id)) { closeModal(id); return true; } return false; });
+                else if (isOpen('lightbox')) closeModal('lightbox');
+                else ['eventModal', 'memberModal', 'lineSummaryModal', 'syncModal', 'availModal', 'settingsModal', 'csvModal', 'lightbox'].some(id => { if (isOpen(id)) { closeModal(id); return true; } return false; });
             });
             document.getElementById('searchInput').addEventListener('input', () => {
                 clearTimeout(searchTimer);
