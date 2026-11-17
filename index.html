@@ -42,6 +42,9 @@
 
             <div class="flex items-center flex-wrap gap-2">
                 <button id="syncChip" onclick="onSyncChipClick()" class="text-xs font-medium px-2.5 py-2 rounded-lg border transition flex items-center gap-1.5"></button>
+                <button onclick="openPosterModal()" class="bg-amber-500 hover:bg-amber-400 text-white text-xs sm:text-sm font-semibold px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5" title="產生大字的班表圖片，方便傳給長輩看">
+                    <i data-ic="calendar" data-cls="w-4 h-4"></i><span>班表圖</span>
+                </button>
                 <button onclick="openLineSummaryModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5" title="產生適合貼到 LINE 的場次清單">
                     <i data-ic="copy" data-cls="w-4 h-4"></i><span>複製公告</span>
                 </button>
@@ -412,6 +415,31 @@
         </div>
     </div>
 
+    <!-- 班表圖（給長輩看） -->
+    <div id="posterModal" data-backdrop class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-start justify-center p-3 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-2xl w-full overflow-hidden fade-in my-3">
+            <div class="px-5 py-4 bg-amber-500 text-white flex items-center justify-between">
+                <h3 class="font-bold text-lg">班表圖（大字版，給長輩看）</h3>
+                <button onclick="closeModal('posterModal')" class="text-amber-50 hover:text-white w-9 h-9 rounded-lg flex items-center justify-center" aria-label="關閉"><i data-ic="x" data-cls="w-5 h-5"></i></button>
+            </div>
+            <div class="p-4 space-y-3 text-sm">
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="block text-xs font-bold text-slate-700 mb-1">樣式</label>
+                        <select id="posterStyle" onchange="renderPoster()" class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white">
+                            <option value="list">一場一張卡（最好讀）</option><option value="cal">月曆版（看整個月）</option></select></div>
+                    <div><label class="block text-xs font-bold text-slate-700 mb-1">字的大小</label>
+                        <select id="posterSize" onchange="renderPoster()" class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white">
+                            <option value="1">大</option><option value="1.25">特大</option></select></div>
+                </div>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="posterNotes" onchange="renderPoster()" class="w-4 h-4 accent-amber-600"> 加上備註（集合時間、服裝…）</label>
+                <p class="text-xs text-slate-500">內容依照目前的月份和人物視角（例如先點「東霖」，就只會畫東霖的場次）。</p>
+                <div class="bg-slate-100 rounded-xl p-2 max-h-[60vh] overflow-y-auto"><img id="posterImg" alt="班表圖" class="w-full rounded-lg shadow"></div>
+                <p class="text-xs text-slate-500">手機：<b>長按上面的圖片</b> → 儲存或分享到 LINE。電腦：按下面的按鈕下載。</p>
+                <button type="button" onclick="downloadPoster()" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-semibold">下載圖片</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 匯出 CSV -->
     <div id="csvModal" data-backdrop class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full overflow-hidden fade-in">
@@ -607,9 +635,10 @@
         const MAX_IMAGES = 3;
 
         // 每次更新網頁時，APP_BUILD 要加 1，並同步修改 version.json，大家才會收到「有新版本」提示
-        const APP_VERSION = '1.5';
-        const APP_BUILD = 6;
+        const APP_VERSION = '1.6';
+        const APP_BUILD = 7;
         const CHANGELOG = [
+            { v: '1.6', date: '11/17', items: ['新增「班表圖」：一鍵產生大字的班表圖片，可長按存到手機或直接傳 LINE 給長輩', '可選「一場一張卡」或「月曆版」，字可以調到特大'] },
             { v: '1.5', date: '11/17', items: ['場次可以上傳圖片（最多 3 張，自動壓縮），點縮圖可放大', '新增「匯出 CSV（給老闆）」：可選本月／整年／全部，附每人場次統計', '場次可設定「需要人員」（例如音控 1、樂手 2），夥伴可自己按「我要報名」填空，月曆會顯示還缺幾人'] },
             { v: '1.4', date: '11/7', items: ['新增「設定」頁：預設畫面、預設時間、每週起始日、更新頻率等', '新增「更新日記」（就是這裡）', '有新版本時會跳出「立即更新」提示，不用再自己清暫存'] },
             { v: '1.3', date: '11/7', items: ['登記可不可可以一次選很多天，並有「選週末」「選整個月」快速選取'] },
@@ -1382,6 +1411,215 @@
         }
 
         /**************************************************************
+         * 班表圖（大字版圖片，給長輩看）
+         **************************************************************/
+        const HEX = { blue: '#2563eb', emerald: '#059669', amber: '#d97706', purple: '#7c3aed', rose: '#e11d48', cyan: '#0891b2' };
+        const PFONT = '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
+        let posterCanvas = null;
+
+        function openPosterModal() { openModal('posterModal'); renderPoster(); }
+
+        function posterData() {
+            const sm = selectedMemberId === 'ALL' ? null : getMemberById(selectedMemberId);
+            let list = events.filter(ev => ev.date.startsWith(monthPrefix())).sort(compareEvents);
+            if (sm) list = list.filter(ev => attendeesOf(ev).includes(sm.id));
+            return { sm, live: list.filter(ev => !isCancelled(ev)), cancelled: list.filter(isCancelled) };
+        }
+        function wrapText(ctx, text, maxW) {
+            const out = []; let line = '';
+            for (const ch of String(text || '')) {
+                if (ch === '\n') { out.push(line); line = ''; continue; }
+                if (ctx.measureText(line + ch).width > maxW && line) { out.push(line); line = ch; } else line += ch;
+            }
+            if (line) out.push(line);
+            return out;
+        }
+        function rrect(ctx, x, y, w, h, r, fill, stroke) {
+            ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+            if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+            if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 3; ctx.stroke(); }
+        }
+        function font(ctx, size, bold) { ctx.font = `${bold ? 700 : 500} ${Math.round(size)}px ${PFONT}`; }
+        function needText(ev) {
+            return (ev.roles || []).map(r => [r.name, r.count - signsOf(ev, r.id).length]).filter(x => x[1] > 0).map(x => `${x[0]}${x[1]}人`).join('、');
+        }
+
+        // 畫「一場一張卡」；回傳總高度（先在暫存畫布上量高度，再畫真的）
+        function drawListPoster(ctx, S, withNotes) {
+            const W = 1080, P = 44, wd = ['日', '一', '二', '三', '四', '五', '六'];
+            const { sm, live, cancelled } = posterData();
+            let y = P;
+            font(ctx, 60 * S, true); ctx.fillStyle = '#111827'; ctx.textBaseline = 'top';
+            ctx.fillText(`${currentMonth + 1}月 做場班表`, P, y); y += 74 * S;
+            font(ctx, 32 * S); ctx.fillStyle = '#6b7280';
+            ctx.fillText(`${currentYear}年　${sm ? sm.name + ' 的場次' : '全部人員'}　共 ${live.length} 場`, P, y); y += 60 * S;
+
+            if (!live.length) { font(ctx, 40 * S, true); ctx.fillStyle = '#374151'; ctx.fillText('這個月還沒有安排場次', P, y + 20); y += 120 * S; }
+            const leftW = 190 * S, gx = P + leftW + 24, gw = W - gx - P - 24;
+            live.forEach(ev => {
+                const d = new Date(ev.date + 'T00:00:00'), dow = d.getDay();
+                const top = y;
+                let ry = y + 26;
+                // 右邊內容
+                const lines = [];
+                font(ctx, 40 * S, true); ctx.fillStyle = '#4338ca'; ctx.fillText(fmtRange(ev).replace(' - ', ' ～ '), gx, ry); ry += 54 * S;
+                font(ctx, 42 * S, true);
+                wrapText(ctx, cleanTitle(ev), gw).forEach(l => { ctx.fillStyle = '#111827'; ctx.fillText(l, gx, ry); ry += 54 * S; });
+                if (ev.location) {
+                    font(ctx, 32 * S); ctx.fillStyle = '#4b5563';
+                    wrapText(ctx, '地點：' + ev.location, gw).forEach(l => { ctx.fillText(l, gx, ry); ry += 44 * S; });
+                }
+                // 人名色塊
+                ry += 8;
+                font(ctx, 36 * S, true);
+                let cx = gx;
+                const names = attendeesOf(ev).map(id => getMemberById(id));
+                if (!names.length) { ctx.fillStyle = '#dc2626'; ctx.fillText('還沒有人', gx, ry); ry += 56 * S; }
+                else {
+                    const ch = 56 * S;
+                    names.forEach(m => {
+                        const tw = ctx.measureText(m.name).width + 36 * S;
+                        if (cx + tw > gx + gw) { cx = gx; ry += ch + 10; }
+                        rrect(ctx, cx, ry, tw, ch, ch / 2, HEX[m.color] || HEX.blue);
+                        ctx.fillStyle = '#fff'; ctx.fillText(m.name, cx + 18 * S, ry + 9 * S);
+                        cx += tw + 12;
+                    });
+                    ry += ch + 12;
+                }
+                const need = needText(ev);
+                if (need) { font(ctx, 34 * S, true); ctx.fillStyle = '#dc2626'; wrapText(ctx, '還缺：' + need, gw).forEach(l => { ctx.fillText(l, gx, ry); ry += 46 * S; }); }
+                if (withNotes && ev.notes) {
+                    font(ctx, 30 * S); ctx.fillStyle = '#92400e';
+                    wrapText(ctx, '備註：' + ev.notes, gw).slice(0, 4).forEach(l => { ctx.fillText(l, gx, ry); ry += 42 * S; });
+                }
+                const h = Math.max(ry - top + 18, 200 * S);
+                // 卡片底色要畫在內容下面：用 destination-over
+                ctx.save(); ctx.globalCompositeOperation = 'destination-over';
+                rrect(ctx, P, top, W - P * 2, h, 24, '#ffffff', '#e5e7eb');
+                ctx.restore();
+                // 左邊日期
+                const dc = dow === 0 || dow === 6 ? '#dc2626' : '#111827';
+                rrect(ctx, P + 16, top + 16, leftW, h - 32, 18, dow === 0 || dow === 6 ? '#fef2f2' : '#eef2ff');
+                font(ctx, 92 * S, true); ctx.fillStyle = dc; ctx.textAlign = 'center';
+                ctx.fillText(String(d.getDate()), P + 16 + leftW / 2, top + 30);
+                font(ctx, 36 * S, true); ctx.fillText(`星期${wd[dow]}`, P + 16 + leftW / 2, top + 30 + 108 * S);
+                ctx.textAlign = 'left';
+                y = top + h + 22;
+            });
+            if (cancelled.length) {
+                font(ctx, 32 * S, true); ctx.fillStyle = '#9ca3af';
+                ctx.fillText('已取消：', P, y + 6); y += 48 * S;
+                font(ctx, 30 * S);
+                cancelled.forEach(ev => { const d = new Date(ev.date + 'T00:00:00'); ctx.fillText(`${d.getMonth() + 1}/${d.getDate()}　${cleanTitle(ev)}`, P + 20, y); y += 42 * S; });
+            }
+            const t = new Date();
+            font(ctx, 24 * S); ctx.fillStyle = '#9ca3af';
+            ctx.fillText(`製表：${t.getMonth() + 1}/${t.getDate()} ${pad(t.getHours())}:${pad(t.getMinutes())}`, P, y + 20);
+            ctx.save(); ctx.globalCompositeOperation = 'destination-over';
+            ctx.fillStyle = '#fffbeb'; ctx.fillRect(0, 0, W, ctx.canvas.height);
+            ctx.restore();
+            return y + 20 + 50 * S;
+        }
+
+        // 月曆版（橫的，一格一天）
+        function drawCalPoster(ctx, S, withNotes) {
+            const W = 1600, P = 36, cw = (W - P * 2) / 7;
+            const { sm, live } = posterData();
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, 100000);
+            ctx.textBaseline = 'top';
+            let y = P;
+            font(ctx, 56 * S, true); ctx.fillStyle = '#111827';
+            ctx.fillText(`${currentYear}年${currentMonth + 1}月 做場班表${sm ? '（' + sm.name + '）' : ''}`, P, y); y += 72 * S;
+            // 顏色對照
+            font(ctx, 28 * S, true);
+            let lx = P;
+            members.forEach(m => { rrect(ctx, lx, y + 4, 28 * S, 28 * S, 6, HEX[m.color] || HEX.blue); ctx.fillStyle = '#374151'; ctx.fillText(m.name, lx + 36 * S, y); lx += ctx.measureText(m.name).width + 76 * S; });
+            y += 50 * S;
+            const labels = weekLabels();
+            font(ctx, 30 * S, true);
+            labels.forEach((l, i) => { const dow = (i + prefs.weekStart) % 7; ctx.fillStyle = dow === 0 || dow === 6 ? '#dc2626' : '#374151'; ctx.textAlign = 'center'; ctx.fillText(l, P + cw * i + cw / 2, y); });
+            ctx.textAlign = 'left'; y += 46 * S;
+            const first = (new Date(currentYear, currentMonth, 1).getDay() - prefs.weekStart + 7) % 7;
+            const days = new Date(currentYear, currentMonth + 1, 0).getDate();
+            const cells = Array(first).fill(null).concat(Array.from({ length: days }, (_, i) => i + 1));
+            while (cells.length % 7) cells.push(null);
+            for (let w = 0; w < cells.length / 7; w++) {
+                // 先量這一週最高的格子
+                const draw = (dry) => {
+                    let maxH = 150 * S;
+                    for (let i = 0; i < 7; i++) {
+                        const day = cells[w * 7 + i];
+                        const x = P + cw * i, ix = x + 10, iw = cw - 20;
+                        let cy = y + 8;
+                        if (!day) continue;
+                        const ds = `${monthPrefix()}-${pad(day)}`;
+                        const dow = new Date(currentYear, currentMonth, day).getDay();
+                        if (!dry) { font(ctx, 34 * S, true); ctx.fillStyle = dow === 0 || dow === 6 ? '#dc2626' : '#111827'; ctx.fillText(String(day), ix, cy); }
+                        cy += 46 * S;
+                        live.filter(ev => ev.date === ds).forEach(ev => {
+                            font(ctx, 26 * S, true);
+                            if (!dry) { ctx.fillStyle = '#4338ca'; ctx.fillText(ev.startTime + (ev.endTime ? '～' + ev.endTime : ''), ix, cy); }
+                            cy += 34 * S;
+                            font(ctx, 24 * S);
+                            wrapText(ctx, cleanTitle(ev), iw).slice(0, 2).forEach(l => { if (!dry) { ctx.fillStyle = '#374151'; ctx.fillText(l, ix, cy); } cy += 31 * S; });
+                            font(ctx, 28 * S, true);
+                            attendeesOf(ev).forEach(id => { const m = getMemberById(id); if (!dry) { ctx.fillStyle = HEX[m.color] || HEX.blue; ctx.fillText('● ' + m.name, ix, cy); } cy += 36 * S; });
+                            const need = needText(ev);
+                            if (need) { font(ctx, 22 * S, true); wrapText(ctx, '缺' + need, iw).forEach(l => { if (!dry) { ctx.fillStyle = '#dc2626'; ctx.fillText(l, ix, cy); } cy += 29 * S; }); }
+                            if (withNotes && ev.notes) { font(ctx, 20 * S); wrapText(ctx, ev.notes, iw).slice(0, 3).forEach(l => { if (!dry) { ctx.fillStyle = '#92400e'; ctx.fillText(l, ix, cy); } cy += 26 * S; }); }
+                            cy += 12;
+                        });
+                        maxH = Math.max(maxH, cy - y + 6);
+                    }
+                    return maxH;
+                };
+                const rowH = draw(true);
+                for (let i = 0; i < 7; i++) {
+                    const day = cells[w * 7 + i];
+                    const ds = day ? `${monthPrefix()}-${pad(day)}` : '';
+                    const busy = day && live.some(ev => ev.date === ds);
+                    ctx.fillStyle = !day ? '#f3f4f6' : busy ? '#fffbeb' : '#ffffff';
+                    ctx.fillRect(P + cw * i, y, cw, rowH);
+                    ctx.strokeStyle = '#d1d5db'; ctx.lineWidth = 2; ctx.strokeRect(P + cw * i, y, cw, rowH);
+                }
+                draw(false);
+                y += rowH;
+            }
+            const t = new Date();
+            font(ctx, 24 * S); ctx.fillStyle = '#9ca3af';
+            ctx.fillText(`共 ${live.length} 場．製表：${t.getMonth() + 1}/${t.getDate()} ${pad(t.getHours())}:${pad(t.getMinutes())}`, P, y + 18);
+            return y + 18 + 50 * S;
+        }
+
+        async function renderPoster() {
+            try { await Promise.race([document.fonts.load(`700 40px "Noto Sans TC"`), new Promise(r => setTimeout(r, 1500))]); } catch (e) { /* 用系統字型 */ }
+            const style = document.getElementById('posterStyle').value;
+            const S = Number(document.getElementById('posterSize').value) || 1;
+            const notes = document.getElementById('posterNotes').checked;
+            const fn = style === 'cal' ? drawCalPoster : drawListPoster;
+            const W = style === 'cal' ? 1600 : 1080;
+            const scratch = document.createElement('canvas'); scratch.width = W; scratch.height = 6000;
+            const H = Math.ceil(fn(scratch.getContext('2d'), S, notes));
+            const c = document.createElement('canvas'); c.width = W; c.height = Math.min(H, 16000);
+            fn(c.getContext('2d'), S, notes);
+            posterCanvas = c;
+            document.getElementById('posterImg').src = c.toDataURL('image/png');
+        }
+
+        function downloadPoster() {
+            if (!posterCanvas) return;
+            posterCanvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `班表_${monthPrefix()}.png`;
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+                showToast('已下載班表圖');
+            }, 'image/png');
+        }
+
+        /**************************************************************
          * 匯出 CSV（給老闆）
          **************************************************************/
         function downloadCsv() {
@@ -2066,7 +2304,7 @@
                 if (e.key !== 'Escape') return;
                 if (isOpen('confirmModal')) resolveConfirm(false);
                 else if (isOpen('lightbox')) closeModal('lightbox');
-                else ['eventModal', 'memberModal', 'lineSummaryModal', 'syncModal', 'availModal', 'settingsModal', 'csvModal', 'lightbox'].some(id => { if (isOpen(id)) { closeModal(id); return true; } return false; });
+                else ['posterModal', 'eventModal', 'memberModal', 'lineSummaryModal', 'syncModal', 'availModal', 'settingsModal', 'csvModal', 'lightbox'].some(id => { if (isOpen(id)) { closeModal(id); return true; } return false; });
             });
             document.getElementById('searchInput').addEventListener('input', () => {
                 clearTimeout(searchTimer);
