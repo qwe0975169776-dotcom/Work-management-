@@ -423,6 +423,15 @@
                 <button onclick="closeModal('posterModal')" class="text-amber-50 hover:text-white w-9 h-9 rounded-lg flex items-center justify-center" aria-label="關閉"><i data-ic="x" data-cls="w-5 h-5"></i></button>
             </div>
             <div class="p-4 space-y-3 text-sm">
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">圖片標題（選填，例如「給王老闆」；不填就用「○月 做場班表」）</label>
+                    <input type="text" id="posterTitle" maxlength="20" onchange="renderPoster()" placeholder="例如：王老闆 11月班表" class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"></div>
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-xs font-bold text-slate-700">要放進圖片的場次（打勾的才會出現）</label>
+                        <span class="text-xs"><button type="button" onclick="posterPickAll(true)" class="text-amber-700 font-bold hover:underline">全選</button> <span class="text-slate-300">|</span> <button type="button" onclick="posterPickAll(false)" class="text-slate-500 hover:underline">全不選</button></span>
+                    </div>
+                    <div id="posterPick" class="max-h-52 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100"></div>
+                </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div><label class="block text-xs font-bold text-slate-700 mb-1">樣式</label>
                         <select id="posterStyle" onchange="renderPoster()" class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white">
@@ -635,9 +644,10 @@
         const MAX_IMAGES = 3;
 
         // 每次更新網頁時，APP_BUILD 要加 1，並同步修改 version.json，大家才會收到「有新版本」提示
-        const APP_VERSION = '1.6';
-        const APP_BUILD = 7;
+        const APP_VERSION = '1.7';
+        const APP_BUILD = 8;
         const CHANGELOG = [
+            { v: '1.7', date: '11/17', items: ['班表圖可以勾選要顯示哪些場次，也可以自訂標題（例如「給王老闆」），方便給不同老闆看不同的班表'] },
             { v: '1.6', date: '11/17', items: ['新增「班表圖」：一鍵產生大字的班表圖片，可長按存到手機或直接傳 LINE 給長輩', '可選「一場一張卡」或「月曆版」，字可以調到特大'] },
             { v: '1.5', date: '11/17', items: ['場次可以上傳圖片（最多 3 張，自動壓縮），點縮圖可放大', '新增「匯出 CSV（給老闆）」：可選本月／整年／全部，附每人場次統計', '場次可設定「需要人員」（例如音控 1、樂手 2），夥伴可自己按「我要報名」填空，月曆會顯示還缺幾人'] },
             { v: '1.4', date: '11/7', items: ['新增「設定」頁：預設畫面、預設時間、每週起始日、更新頻率等', '新增「更新日記」（就是這裡）', '有新版本時會跳出「立即更新」提示，不用再自己清暫存'] },
@@ -1416,14 +1426,35 @@
         const HEX = { blue: '#2563eb', emerald: '#059669', amber: '#d97706', purple: '#7c3aed', rose: '#e11d48', cyan: '#0891b2' };
         const PFONT = '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
         let posterCanvas = null;
+        let posterOff = new Set();   // 被取消勾選的場次（新場次預設會顯示）
 
-        function openPosterModal() { openModal('posterModal'); renderPoster(); }
-
-        function posterData() {
+        function posterBase() {
             const sm = selectedMemberId === 'ALL' ? null : getMemberById(selectedMemberId);
             let list = events.filter(ev => ev.date.startsWith(monthPrefix())).sort(compareEvents);
             if (sm) list = list.filter(ev => attendeesOf(ev).includes(sm.id));
-            return { sm, live: list.filter(ev => !isCancelled(ev)), cancelled: list.filter(isCancelled) };
+            return { sm, list };
+        }
+        function openPosterModal() { renderPosterPick(); openModal('posterModal'); renderPoster(); }
+        function renderPosterPick() {
+            const { list } = posterBase();
+            const wd = ['日', '一', '二', '三', '四', '五', '六'];
+            document.getElementById('posterPick').innerHTML = list.length ? list.map(ev => {
+                const d = new Date(ev.date + 'T00:00:00');
+                return `<label class="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer ${isCancelled(ev) ? 'text-slate-400' : 'text-slate-800'}">
+                    <input type="checkbox" data-pk="${escapeHtml(ev.id)}" ${posterOff.has(ev.id) ? '' : 'checked'} class="w-5 h-5 accent-amber-600 shrink-0">
+                    <span class="font-bold shrink-0">${d.getMonth() + 1}/${d.getDate()}（${wd[d.getDay()]}）</span>
+                    <span class="truncate">${escapeHtml(cleanTitle(ev))}${isCancelled(ev) ? '（已取消）' : ''}</span></label>`;
+            }).join('') : '<div class="p-3 text-slate-400 text-sm">這個月沒有場次</div>';
+        }
+        function posterPickAll(on) {
+            posterBase().list.forEach(ev => on ? posterOff.delete(ev.id) : posterOff.add(ev.id));
+            renderPosterPick(); renderPoster();
+        }
+
+        function posterData() {
+            const { sm, list } = posterBase();
+            const shown = list.filter(ev => !posterOff.has(ev.id));
+            return { sm, live: shown.filter(ev => !isCancelled(ev)), cancelled: shown.filter(isCancelled) };
         }
         function wrapText(ctx, text, maxW) {
             const out = []; let line = '';
@@ -1441,6 +1472,7 @@
             if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 3; ctx.stroke(); }
         }
         function font(ctx, size, bold) { ctx.font = `${bold ? 700 : 500} ${Math.round(size)}px ${PFONT}`; }
+        function posterTitleText() { return document.getElementById('posterTitle').value.trim(); }
         function needText(ev) {
             return (ev.roles || []).map(r => [r.name, r.count - signsOf(ev, r.id).length]).filter(x => x[1] > 0).map(x => `${x[0]}${x[1]}人`).join('、');
         }
@@ -1451,9 +1483,9 @@
             const { sm, live, cancelled } = posterData();
             let y = P;
             font(ctx, 60 * S, true); ctx.fillStyle = '#111827'; ctx.textBaseline = 'top';
-            ctx.fillText(`${currentMonth + 1}月 做場班表`, P, y); y += 74 * S;
+            ctx.fillText(posterTitleText() || `${currentMonth + 1}月 做場班表`, P, y); y += 74 * S;
             font(ctx, 32 * S); ctx.fillStyle = '#6b7280';
-            ctx.fillText(`${currentYear}年　${sm ? sm.name + ' 的場次' : '全部人員'}　共 ${live.length} 場`, P, y); y += 60 * S;
+            ctx.fillText(`${currentYear}年${currentMonth + 1}月　${sm ? sm.name + ' 的場次' : '全部人員'}　共 ${live.length} 場`, P, y); y += 60 * S;
 
             if (!live.length) { font(ctx, 40 * S, true); ctx.fillStyle = '#374151'; ctx.fillText('這個月還沒有安排場次', P, y + 20); y += 120 * S; }
             const leftW = 190 * S, gx = P + leftW + 24, gw = W - gx - P - 24;
@@ -1530,7 +1562,7 @@
             ctx.textBaseline = 'top';
             let y = P;
             font(ctx, 56 * S, true); ctx.fillStyle = '#111827';
-            ctx.fillText(`${currentYear}年${currentMonth + 1}月 做場班表${sm ? '（' + sm.name + '）' : ''}`, P, y); y += 72 * S;
+            ctx.fillText(posterTitleText() || `${currentYear}年${currentMonth + 1}月 做場班表${sm ? '（' + sm.name + '）' : ''}`, P, y); y += 72 * S;
             // 顏色對照
             font(ctx, 28 * S, true);
             let lx = P;
@@ -2294,6 +2326,7 @@
             });
             document.addEventListener('change', e => {
                 const d = e.target.dataset || {};
+                if (d.pk !== undefined) { if (e.target.checked) posterOff.delete(d.pk); else posterOff.add(d.pk); renderPoster(); }
                 if (d.roleCount !== undefined && modalRoles[d.roleCount]) modalRoles[d.roleCount].count = Number(e.target.value);
                 if (e.target.dataset && e.target.dataset.rename) renameMember(e.target.dataset.rename, e.target.value);
             });
