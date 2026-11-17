@@ -470,7 +470,7 @@
 
     <!-- 圖片放大 -->
     <div id="lightbox" onclick="closeModal('lightbox')" class="fixed inset-0 bg-slate-950/90 z-[60] hidden items-center justify-center p-4 cursor-zoom-out">
-        <img id="lightboxImg" src="" alt="場次圖片" class="max-w-full max-h-[88vh] rounded-xl shadow-2xl object-contain bg-slate-900">
+        <img id="lightboxImg" src="" referrerpolicy="no-referrer" alt="場次圖片" class="max-w-full max-h-[88vh] rounded-xl shadow-2xl object-contain bg-slate-900">
         <span class="absolute top-4 right-4 text-white text-sm bg-white/15 px-3 py-1.5 rounded-full">點任意處關閉</span>
     </div>
 
@@ -517,6 +517,14 @@
                     </div>
                 </section>
 
+                <section id="setToolsBlock" class="space-y-3">
+                    <h4 class="text-xs font-bold text-indigo-600 tracking-wider">紀錄與還原</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" onclick="openTrash()" class="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 font-semibold text-slate-700">垃圾桶（可還原）</button>
+                        <button type="button" onclick="openLog()" class="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 font-semibold text-slate-700">操作紀錄</button>
+                    </div>
+                </section>
+
                 <section id="setSyncBlock" class="space-y-3">
                     <h4 class="text-xs font-bold text-indigo-600 tracking-wider">同步</h4>
                     <div><label class="block text-xs font-bold text-slate-700 mb-1">自動更新頻率</label>
@@ -548,6 +556,17 @@
                     <div id="changelogList" class="space-y-3"></div>
                 </section>
             </div>
+        </div>
+    </div>
+
+    <!-- 垃圾桶 / 操作紀錄 -->
+    <div id="infoModal" data-backdrop class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[55] hidden items-start justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden fade-in my-4 sm:my-8">
+            <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <h3 id="infoTitle" class="font-bold text-lg"></h3>
+                <button onclick="closeModal('infoModal')" class="text-slate-400 hover:text-white w-9 h-9 rounded-lg flex items-center justify-center" aria-label="關閉"><i data-ic="x" data-cls="w-5 h-5"></i></button>
+            </div>
+            <div id="infoBody" class="p-4 space-y-2 text-sm max-h-[70vh] overflow-y-auto"></div>
         </div>
     </div>
 
@@ -639,14 +658,14 @@
         const K_IMG = 'gig_img_v2';
         const SIGN_TITLE = '__SIGN__';
         const IMG_TITLE = '__IMG__';
-        const IMG_ROW_CHARS = 720 * 60;            // 每一列最多放的圖片字元數（試算表一格上限 5 萬字）
-        const IMG_MAX_CHARS = IMG_ROW_CHARS * 2;   // 每張圖片壓縮到最多 2 列
+        const IMG_MAX_CHARS = 450000;   // 壓縮後每張圖片大約 330KB 以內（圖片存在雲端硬碟）
         const MAX_IMAGES = 3;
 
         // 每次更新網頁時，APP_BUILD 要加 1，並同步修改 version.json，大家才會收到「有新版本」提示
-        const APP_VERSION = '1.7';
-        const APP_BUILD = 8;
+        const APP_VERSION = '1.8';
+        const APP_BUILD = 9;
         const CHANGELOG = [
+            { v: '1.8', date: '11/17', items: ['速度大改善：每次只載入正在看的那個月', '圖片改存到 Google 雲端硬碟，不再拖慢更新、也比較省流量，圖片也更清楚', '新增「操作紀錄」：誰在什麼時候改了什麼（設定裡）', '新增「垃圾桶」：刪掉的場次 30 天內可以還原（設定裡）', '兩個人同時改同一場時，會先提醒，不會默默蓋掉別人的修改'] },
             { v: '1.7', date: '11/17', items: ['班表圖可以勾選要顯示哪些場次，也可以自訂標題（例如「給王老闆」），方便給不同老闆看不同的班表'] },
             { v: '1.6', date: '11/17', items: ['新增「班表圖」：一鍵產生大字的班表圖片，可長按存到手機或直接傳 LINE 給長輩', '可選「一場一張卡」或「月曆版」，字可以調到特大'] },
             { v: '1.5', date: '11/17', items: ['場次可以上傳圖片（最多 3 張，自動壓縮），點縮圖可放大', '新增「匯出 CSV（給老闆）」：可選本月／整年／全部，附每人場次統計', '場次可設定「需要人員」（例如音控 1、樂手 2），夥伴可自己按「我要報名」填空，月曆會顯示還缺幾人'] },
@@ -793,10 +812,10 @@
             const res = await fetch(CONFIG.API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ ...body, key })
+                body: JSON.stringify({ ...body, key, who: (getMemberById(me) || {}).name || '' })
             });
             const data = await res.json();
-            if (!data.ok) { const e = new Error(data.error || 'ERROR'); e.code = data.error; throw e; }
+            if (!data.ok) { const e = new Error(data.error || 'ERROR'); e.code = data.error; e.data = data; throw e; }
             return data;
         }
 
@@ -828,9 +847,11 @@
 
         function applyServerData(r) {
             members = Array.isArray(r.members) ? r.members : [];
-            const sp = splitRows(Array.isArray(r.events) ? r.events : []);
-            events = sp.ev; avail = sp.av; signups = sp.sg; images = sp.im;
-            store.set(K_CACHE, JSON.stringify({ members, events, avail, signups }));
+            events = Array.isArray(r.events) ? r.events : [];
+            avail = Array.isArray(r.avail) ? r.avail : [];
+            signups = Array.isArray(r.signups) ? r.signups : [];
+            images = Array.isArray(r.images) ? r.images : [];
+            store.set(K_CACHE, JSON.stringify({ month: monthPrefix(), members, events, avail, signups, images }));
             if (!startFilterApplied) {
                 startFilterApplied = true;
                 if (prefs.defaultFilter === 'me' && getMemberById(me)) selectedMemberId = me;
@@ -843,9 +864,10 @@
         async function refresh(silent) {
             if (!REMOTE || !key || pendingWrites > 0) return;
             setSync('syncing');
+            const month = monthPrefix();
             try {
-                const r = await api({ action: 'list' });
-                if (pendingWrites > 0) return;
+                const r = await api({ action: 'list', month });
+                if (pendingWrites > 0 || month !== monthPrefix()) return;
                 applyServerData(r);
                 setSync('ok');
                 if (!me && !store.get(K_ASKED) && !isOpen('syncModal')) { store.set(K_ASKED, '1'); openSyncModal(true); }
@@ -857,6 +879,12 @@
                 setSync('needkey');
                 if (!isOpen('syncModal')) openSyncModal();
                 document.getElementById('keyError').classList.remove('hidden');
+            } else if (err.code === 'FULL') {
+                setSync('ok'); showToast('這個職位剛好被別人報滿了', 'error');
+            } else if (err.code === 'NOT_FOUND') {
+                setSync('ok'); showToast('這筆資料已經被別人刪除了', 'error');
+            } else if (err.code === 'OLD_VERSION') {
+                setSync('error'); showToast('Google 試算表那邊的程式版本不符，請通知管理員', 'error');
             } else {
                 setSync('error');
                 if (!silent) showToast('連不上 Google 試算表，請檢查網路後再試', 'error');
@@ -868,10 +896,12 @@
             if (!REMOTE) { saveLocal(); return; }
             pendingWrites++;
             setSync('syncing');
-            try { await api(body); }
+            let r = null;
+            try { r = await api(body); }
             catch (err) { handleApiError(err, false); }
             finally { pendingWrites--; }
             await refresh(true);
+            return r;
         }
 
         /**************************************************************
@@ -1085,7 +1115,7 @@
                             }).join('')}</div>
                         </div>` : '';
                 const imgs = evImages(ev.id);
-                const imgsHtml = imgs.length ? `<div class="flex flex-wrap gap-2">${imgs.map(i => `<button data-act="img" data-id="${escapeHtml(ev.id)}" data-img="${escapeHtml(i.id)}" class="w-20 h-20 rounded-lg overflow-hidden border border-slate-200"><img src="${i.data}" alt="場次圖片" class="w-full h-full object-cover"></button>`).join('')}</div>` : '';
+                const imgsHtml = imgs.length ? `<div class="flex flex-wrap gap-2">${imgs.map(i => `<button data-act="img" data-id="${escapeHtml(ev.id)}" data-img="${escapeHtml(i.id)}" class="w-20 h-20 rounded-lg overflow-hidden border border-slate-200"><img src="${escapeHtml(i.data)}" referrerpolicy="no-referrer" loading="lazy" alt="場次圖片" class="w-full h-full object-cover"></button>`).join('')}</div>` : '';
                 return `
                     <div class="bg-white rounded-xl border border-slate-200/90 hover:border-indigo-300 hover:shadow-md transition p-4 space-y-3 ${isCancelled(ev) ? 'grayscale opacity-80' : ''}">
                         <div class="flex items-start justify-between gap-2">
@@ -1129,13 +1159,24 @@
             currentMonth += delta;
             if (currentMonth > 11) { currentMonth = 0; currentYear++; }
             else if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-            renderAll();
+            monthChanged();
             if (isOpen('availModal')) { avSel = []; document.getElementById('avEditor').classList.add('hidden'); renderAvailGrid(); }
         }
         function goToToday() {
             const t = new Date();
             currentYear = t.getFullYear(); currentMonth = t.getMonth();
-            renderAll();
+            monthChanged();
+        }
+        // 同步模式：換月份時先清空畫面，再向試算表要這個月的資料
+        function monthChanged() {
+            if (REMOTE) {
+                let c = null;
+                try { c = JSON.parse(store.get(K_CACHE) || 'null'); } catch (e) { c = null; }
+                if (c && c.month === monthPrefix()) { events = c.events || []; avail = c.avail || []; signups = c.signups || []; images = c.images || []; }
+                else { events = []; avail = []; signups = []; images = []; }
+                renderAll();
+                refresh(true);
+            } else renderAll();
         }
 
         /**************************************************************
@@ -1251,30 +1292,47 @@
                 updatedAt: Date.now()
             };
             const idx = events.findIndex(x => x.id === id);
+            const baseUpdatedAt = id && idx !== -1 ? (events[idx].updatedAt || '') : '';
             if (id && idx !== -1) events[idx] = data; else events.push(data);
 
-            const bodies = [{ action: 'upsertEvent', event: evToRow(data) }];
-            // 被刪掉的職位 → 一併清掉報名
+            // 被刪掉的職位 → 一併清掉報名（試算表那邊也會自動清）
             const roleIds = roles.map(r => r.id);
-            const goneSigns = signups.filter(s => s.evId === data.id && !roleIds.includes(s.roleId));
-            signups = signups.filter(s => !goneSigns.includes(s));
-            goneSigns.forEach(s => bodies.push({ action: 'deleteEvent', id: s.id }));
-            // 日期改了 → 報名列也更新日期（試算表比較好讀）
-            signups.filter(s => s.evId === data.id && s.date !== date).forEach(s => { s.date = date; bodies.push({ action: 'upsertEvent', event: signToRow(s) }); });
+            signups = signups.filter(s => s.evId !== data.id || roleIds.includes(s.roleId));
             // 圖片：新增的上傳、被移除的刪掉
             const keepIds = modalImages.map(i => i.id);
             const goneImgs = images.filter(i => i.evId === data.id && !keepIds.includes(i.id));
-            goneImgs.forEach(i => imgRowIds(i).forEach(rid => bodies.push({ action: 'deleteEvent', id: rid })));
-            const newImgs = modalImages.filter(i => i.isNew).map(i => ({ id: i.id, evId: data.id, n: i.n, data: i.data }));
-            newImgs.forEach(i => imgToRows(i, date).forEach(row => bodies.push({ action: 'upsertEvent', event: row })));
+            const newImgs = modalImages.filter(i => i.isNew).map(i => ({ id: i.id, evId: data.id, data: i.data }));
             images = images.filter(i => i.evId !== data.id || keepIds.includes(i.id)).concat(newImgs);
 
             const [y, m] = date.split('-').map(Number);
+            const monthMoved = y !== currentYear || m - 1 !== currentMonth;
             currentYear = y; currentMonth = m - 1;
             closeModal('eventModal');
             renderAll();
             showToast(newImgs.length ? `已儲存，圖片上傳中…（${newImgs.length} 張）` : (id ? '場次資訊已更新' : '已新增場次'));
-            commitMany(bodies);
+            if (!REMOTE) { saveLocal(); return; }
+            if (monthMoved) store.set(K_CACHE, '');
+            saveEventRemote(data, baseUpdatedAt, goneImgs, newImgs);
+        }
+
+        async function saveEventRemote(data, baseUpdatedAt, goneImgs, newImgs) {
+            pendingWrites++;
+            setSync('syncing');
+            try {
+                try {
+                    await api({ action: 'upsertEvent', event: data, baseUpdatedAt });
+                } catch (err) {
+                    if (err.code !== 'CONFLICT') throw err;
+                    const cur = (err.data && err.data.current) || {};
+                    const ok = await askConfirm(`「${cur.updatedBy || '別人'}」剛剛也改了這一場：\n${cur.date || ''}　${cleanTitle(cur.title ? cur : data)}\n\n要用你的版本蓋過去嗎？\n（按「取消」會放棄你這次的修改，改顯示對方的最新內容）`, '用我的蓋過去');
+                    if (!ok) { showToast('已放棄你的修改，顯示最新內容'); return; }
+                    await api({ action: 'upsertEvent', event: data, force: true });
+                }
+                for (const i of goneImgs) await api({ action: 'deleteImage', id: i.id });
+                for (const i of newImgs) await api({ action: 'uploadImage', evId: data.id, imgId: i.id, data: i.data });
+                if (newImgs.length) showToast('圖片上傳完成');
+            } catch (err) { handleApiError(err, false); }
+            finally { pendingWrites--; await refresh(true); }
         }
 
         async function deleteCurrentEvent() {
@@ -1283,16 +1341,13 @@
             if (!ev) return;
             const ok = await askConfirm(`確定要刪除這場嗎？\n\n${ev.date}　${cleanTitle(ev)}\n\n刪除後所有人都會看不到（報名和圖片也會一起刪除）。`, '刪除');
             if (!ok) return;
-            const bodies = [{ action: 'deleteEvent', id }];
-            signups.filter(s => s.evId === id).forEach(s => bodies.push({ action: 'deleteEvent', id: s.id }));
-            evImages(id).forEach(i => imgRowIds(i).forEach(rid => bodies.push({ action: 'deleteEvent', id: rid })));
             events = events.filter(x => x.id !== id);
             signups = signups.filter(s => s.evId !== id);
             images = images.filter(i => i.evId !== id);
             closeModal('eventModal');
             renderAll();
-            showToast('場次已刪除');
-            commitMany(bodies);
+            showToast(REMOTE ? '已刪除（30 天內可在「設定 → 垃圾桶」還原）' : '場次已刪除');
+            commit({ action: 'deleteEvent', id });
         }
 
         /**************************************************************
@@ -1348,7 +1403,7 @@
             signups = signups.filter(x => x.id !== s.id).concat(s);
             renderAll();
             showToast(`已報名：${role.name}`);
-            commit({ action: 'upsertEvent', event: signToRow(s) });
+            commit({ action: 'signup', signup: { evId, roleId, memberId: me } });
         }
         async function unSign(signId) {
             const s = signups.find(x => x.id === signId);
@@ -1359,7 +1414,7 @@
             signups = signups.filter(x => x.id !== signId);
             renderAll();
             showToast('已取消報名');
-            commit({ action: 'deleteEvent', id: signId });
+            commit({ action: 'unsign', id: signId });
         }
 
         /**************************************************************
@@ -1376,7 +1431,7 @@
         }
         async function compressImage(file) {
             const img = await loadImg(file);
-            let max = 1280, q = 0.72, out = '';
+            let max = 1600, q = 0.8, out = '';
             for (let t = 0; t < 14; t++) {
                 const s = Math.min(1, max / Math.max(img.width, img.height));
                 const c = document.createElement('canvas');
@@ -1399,8 +1454,7 @@
             for (const f of files.slice(0, room)) {
                 try {
                     const data = await compressImage(f);
-                    const n = Math.ceil(data.split(',')[1].length / IMG_ROW_CHARS);
-                    modalImages.push({ id: uid('i').slice(0, 6), data, n, isNew: true });
+                    modalImages.push({ id: uid('i').slice(0, 6), data, isNew: true });
                     renderImgThumbs();
                 } catch (err) { showToast('這張圖片讀不出來，請換一張', 'error'); }
             }
@@ -1408,7 +1462,7 @@
         function renderImgThumbs() {
             document.getElementById('imgThumbs').innerHTML = modalImages.map((i, k) => `
                 <div class="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200">
-                    <img src="${i.data}" alt="預覽" class="w-full h-full object-cover">
+                    <img src="${escapeHtml(i.data)}" referrerpolicy="no-referrer" alt="預覽" class="w-full h-full object-cover">
                     <button type="button" data-act="rmImg" data-idx="${k}" class="absolute top-1 right-1 w-6 h-6 rounded-full bg-rose-600 text-white text-xs flex items-center justify-center shadow" aria-label="移除圖片">✕</button>
                 </div>`).join('');
             document.getElementById('imgAddBtn').classList.toggle('hidden', modalImages.length >= MAX_IMAGES);
@@ -1654,8 +1708,22 @@
         /**************************************************************
          * 匯出 CSV（給老闆）
          **************************************************************/
-        function downloadCsv() {
+        async function downloadCsv() {
             const range = document.getElementById('csvRange').value;
+            if (REMOTE && range !== 'month') {
+                const saved = { events, signups };
+                try {
+                    showToast('正在向試算表抓資料…');
+                    const r = await api(range === 'year' ? { action: 'listRange', from: `${currentYear}-01-01`, to: `${currentYear}-12-31` } : { action: 'listRange' });
+                    events = r.events || []; signups = r.signups || [];
+                    buildCsv(range);
+                } catch (err) { handleApiError(err, false); }
+                finally { events = saved.events; signups = saved.signups; }
+                return;
+            }
+            buildCsv(range);
+        }
+        function buildCsv(range) {
             const withStats = document.getElementById('csvStats').checked;
             const withCancelled = document.getElementById('csvCancelled').checked;
             let list = events.filter(ev => range === 'month' ? ev.date.startsWith(monthPrefix()) : range === 'year' ? ev.date.startsWith(String(currentYear)) : true);
@@ -1758,8 +1826,6 @@
             renderAll();
             showToast('成員已移除');
             await commit({ action: 'deleteMember', id });
-            const extra = goneAvail.map(a => a.id).concat(goneSign.map(s => s.id));
-            if (extra.length) await commitMany(extra.map(x => ({ action: 'deleteEvent', id: x })));
         }
 
         /**************************************************************
@@ -1905,55 +1971,6 @@
         function isCancelled(ev) { return ev.title.startsWith(CANCEL_PREFIX); }
         function cleanTitle(ev) { return isCancelled(ev) ? ev.title.slice(CANCEL_PREFIX.length) : ev.title; }
 
-        function splitRows(rows) {
-            const ev = [], av = [], sg = [], parts = {};
-            rows.forEach(r => {
-                const att = r.attendees || [];
-                if (r.title === AV_TITLE) {
-                    const mid = att[0];
-                    if (mid) av.push({ id: r.id, date: r.date, memberId: mid, status: r.notes === 'no' ? 'no' : (r.notes === 'part' ? 'part' : 'yes'), from: r.startTime || '', to: r.endTime || '' });
-                } else if (r.title === SIGN_TITLE) {
-                    if (att[0] && r.location) sg.push({ id: r.id, evId: r.location, roleId: r.notes, memberId: att[0], date: r.date });
-                } else if (r.title === IMG_TITLE) {
-                    const k = `${r.location}|${r.notes}`;
-                    const p = parts[k] || (parts[k] = { evId: r.location, id: r.notes, n: Number(r.endTime) || 1, chunks: [] });
-                    p.chunks[Number(r.startTime) || 0] = att.join('');
-                } else if (!r.title.startsWith('__')) {
-                    const ids = [], chunks = [];
-                    att.forEach(a => a.startsWith('~') ? chunks.push(a.slice(1)) : ids.push(a));
-                    let roles = [];
-                    if (chunks.length) { try { roles = JSON.parse(decodeURIComponent(chunks.join(''))); } catch (e) { roles = []; } }
-                    ev.push({ ...r, attendees: ids, roles: Array.isArray(roles) ? roles : [] });
-                }
-            });
-            const im = Object.values(parts)
-                .filter(p => p.chunks.filter(Boolean).length === p.n)
-                .map(p => ({ id: p.id, evId: p.evId, n: p.n, data: 'data:image/jpeg;base64,' + p.chunks.join('') }));
-            return { ev, av, sg, im };
-        }
-        // 場次寫回試算表時：「需要人員」編碼後藏在出席人員欄（以 ~ 開頭），不用改 Apps Script
-        function evToRow(ev) {
-            const enc = (ev.roles && ev.roles.length) ? encodeURIComponent(JSON.stringify(ev.roles)) : '';
-            const chunks = enc ? enc.match(/.{1,59}/g).map(c => '~' + c) : [];
-            const row = { ...ev, attendees: [...ev.attendees, ...chunks] };
-            delete row.roles;
-            return row;
-        }
-        function signToRow(s) {
-            const editor = getMemberById(me);
-            return { id: s.id, title: SIGN_TITLE, date: s.date, startTime: '', endTime: '', location: s.evId, mapUrl: '', attendees: [s.memberId], notes: s.roleId, updatedBy: editor ? editor.name : '', updatedAt: Date.now() };
-        }
-        function imgRowIds(img) { return Array.from({ length: img.n }, (_, k) => `im_${img.evId}_${img.id}_${k}`); }
-        function imgToRows(img, date) {
-            const b64 = img.data.split(',')[1];
-            const editor = getMemberById(me);
-            return imgRowIds(img).map((id, k) => ({
-                id, title: IMG_TITLE, date, startTime: String(k), endTime: String(img.n), location: img.evId, mapUrl: '',
-                attendees: b64.slice(k * IMG_ROW_CHARS, (k + 1) * IMG_ROW_CHARS).match(/.{1,60}/g) || [],
-                notes: img.id, updatedBy: editor ? editor.name : '', updatedAt: Date.now()
-            }));
-        }
-
         // 某場實際出席的人 = 直接勾選的 + 自己報名的
         function attendeesOf(ev) {
             const set = new Set(ev.attendees || []);
@@ -1967,10 +1984,6 @@
         }
         function evImages(evId) { return images.filter(i => i.evId === evId); }
 
-        function avToRow(a) {
-            const editor = getMemberById(me);
-            return { id: a.id, title: AV_TITLE, date: a.date, startTime: a.from || '', endTime: a.to || '', location: '', mapUrl: '', attendees: [a.memberId], notes: a.status, updatedBy: editor ? editor.name : '', updatedAt: Date.now() };
-        }
         function getAvail(memberId, date) { return avail.find(a => a.memberId === memberId && a.date === date); }
         function availShort(a) {
             if (a.status === 'yes') return '可';
@@ -2148,7 +2161,7 @@
             renderAvailGrid();
             renderAll();
             showToast(list.length > 1 ? `已登記 ${list.length} 天` : '已登記');
-            commitMany(list.map(a => ({ action: 'upsertEvent', event: avToRow(a) })));
+            commit({ action: 'upsertAvail', items: list });
         }
 
         function clearAvail() {
@@ -2160,7 +2173,7 @@
             renderAvailGrid();
             renderAll();
             showToast('已清除');
-            if (ids.length) commitMany(ids.map(id => ({ action: 'deleteEvent', id })));
+            if (ids.length) commit({ action: 'deleteAvail', ids });
         }
 
         /**************************************************************
@@ -2197,6 +2210,7 @@
             document.getElementById('setPoll').value = String(prefs.pollSec);
             document.getElementById('setKey').value = '';
             document.getElementById('setSyncBlock').classList.toggle('hidden', !REMOTE);
+            document.getElementById('setToolsBlock').classList.toggle('hidden', !REMOTE);
             document.getElementById('setVersion').textContent = `目前版本 v${APP_VERSION}`;
             document.getElementById('changelogList').innerHTML = CHANGELOG.map(c => `
                 <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
@@ -2205,6 +2219,48 @@
                 </div>`).join('');
             openModal('settingsModal');
         }
+        function fmtTime(ms) { const d = new Date(Number(ms)); return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+        async function openTrash() {
+            document.getElementById('infoTitle').textContent = '垃圾桶（30 天內可還原）';
+            const body = document.getElementById('infoBody');
+            body.innerHTML = '<div class="text-slate-400 py-6 text-center">讀取中…</div>';
+            openModal('infoModal');
+            try {
+                const r = await api({ action: 'listTrash' });
+                body.innerHTML = (r.trash || []).length ? r.trash.map(t => `
+                    <div class="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                        <div class="min-w-0"><div class="font-bold text-slate-800 truncate">${escapeHtml(t.date)}　${escapeHtml(cleanTitle(t))}</div>
+                            <div class="text-xs text-slate-500">${escapeHtml(t.deletedBy)} 在 ${fmtTime(t.deletedAt)} 刪除</div></div>
+                        <button data-act="restore" data-id="${escapeHtml(t.trashId)}" class="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold">還原</button>
+                    </div>`).join('') : '<div class="text-slate-400 py-6 text-center">垃圾桶是空的</div>';
+            } catch (err) { body.innerHTML = '<div class="text-rose-600 py-6 text-center">讀取失敗，請稍後再試</div>'; handleApiError(err, true); }
+        }
+        async function restoreTrash(trashId) {
+            try {
+                const r = await api({ action: 'restore', trashId });
+                closeModal('infoModal'); closeModal('settingsModal');
+                showToast('已還原');
+                if (r.date) { const [y, m] = r.date.split('-').map(Number); currentYear = y; currentMonth = m - 1; }
+                store.set(K_CACHE, '');
+                monthChanged();
+            } catch (err) { handleApiError(err, false); }
+        }
+        async function openLog() {
+            document.getElementById('infoTitle').textContent = '操作紀錄（最近 100 筆）';
+            const body = document.getElementById('infoBody');
+            body.innerHTML = '<div class="text-slate-400 py-6 text-center">讀取中…</div>';
+            openModal('infoModal');
+            try {
+                const r = await api({ action: 'listLog', limit: 100 });
+                body.innerHTML = (r.log || []).length ? r.log.map(l => `
+                    <div class="p-2.5 rounded-lg border border-slate-100">
+                        <div class="text-xs text-slate-400">${escapeHtml(l.time.slice(5, 16))}</div>
+                        <div><b>${escapeHtml(l.who)}</b>　${escapeHtml(l.action)}</div>
+                        <div class="text-xs text-slate-600 break-words">${escapeHtml(l.detail)}</div>
+                    </div>`).join('') : '<div class="text-slate-400 py-6 text-center">還沒有紀錄</div>';
+            } catch (err) { body.innerHTML = '<div class="text-rose-600 py-6 text-center">讀取失敗，請稍後再試</div>'; handleApiError(err, true); }
+        }
+
         function onPrefChange(k, v) {
             prefs[k] = v;
             store.set(K_PREFS, JSON.stringify(prefs));
@@ -2276,7 +2332,7 @@
                 document.getElementById('resetSep').classList.add('hidden');
                 try {
                     const c = JSON.parse(store.get(K_CACHE) || 'null');
-                    if (c && Array.isArray(c.members) && Array.isArray(c.events)) { members = c.members; events = c.events; avail = Array.isArray(c.avail) ? c.avail : []; signups = Array.isArray(c.signups) ? c.signups : []; }
+                    if (c && Array.isArray(c.members)) { members = c.members; if (c.month === monthPrefix()) { events = c.events || []; avail = c.avail || []; signups = c.signups || []; images = c.images || []; } }
                 } catch (e) { /* 沒有快取就等網路 */ }
                 renderSyncChip();
                 renderAll();
@@ -2316,6 +2372,7 @@
                 else if (act === 'signup') signUp(id, t.dataset.role);
                 else if (act === 'unsign') unSign(id);
                 else if (act === 'img') openLightbox(id, t.dataset.img);
+                else if (act === 'restore') restoreTrash(id);
                 else if (act === 'rmRole') removeRole(Number(t.dataset.idx));
                 else if (act === 'rmImg') { modalImages.splice(Number(t.dataset.idx), 1); renderImgThumbs(); }
             });
@@ -2337,7 +2394,7 @@
                 if (e.key !== 'Escape') return;
                 if (isOpen('confirmModal')) resolveConfirm(false);
                 else if (isOpen('lightbox')) closeModal('lightbox');
-                else ['posterModal', 'eventModal', 'memberModal', 'lineSummaryModal', 'syncModal', 'availModal', 'settingsModal', 'csvModal', 'lightbox'].some(id => { if (isOpen(id)) { closeModal(id); return true; } return false; });
+                else ['infoModal', 'posterModal', 'eventModal', 'memberModal', 'lineSummaryModal', 'syncModal', 'availModal', 'settingsModal', 'csvModal', 'lightbox'].some(id => { if (isOpen(id)) { closeModal(id); return true; } return false; });
             });
             document.getElementById('searchInput').addEventListener('input', () => {
                 clearTimeout(searchTimer);
